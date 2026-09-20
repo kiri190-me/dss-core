@@ -1,0 +1,28 @@
+{
+  // 사이트들(RF_Service_System · dss-po)의 tsconfig 와 같은 값으로 맞춰 둔다.
+  // 이 묶음의 소스가 그쪽 컴파일러에 그대로 실려 들어가서다 —
+  // 여기서만 통과하고 사이트에서 깨지면 고칠 곳을 찾기 어렵다.
+  // (vendor/dss-ui 가 먼저 쓴 방식이다. 그쪽 tsconfig 와 같은 모양이다)
+  //
+  // 다른 점 셋:
+  //  - "plugins": next 플러그인을 넣지 않는다. 이 묶음은 next 를 모른다.
+  //  - "paths": @/ 별칭이 없다. 상대 경로만 쓴다 — 별칭은 가져다 쓰는
+  //    사이트마다 다르게 설정되어 있어, 여기서 쓰면 그쪽에서 깨진다.
+  //  - "noEmit": true. 소스를 그대로 넘기는 묶음이라 빌드 산출물이 없다.
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules"]
+}

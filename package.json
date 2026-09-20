@@ -1,0 +1,30 @@
+{
+  "name": "@dss/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A/S 관리 · PO/내자 두 사이트가 같은 DB(dss_as)를 함께 보기 위해 나눠 쓰는 Drizzle 스키마. 마이그레이션은 담지 않는다 — A/S 가 소유한다.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^24.13.3",
+    "drizzle-orm": "^0.45.2",
+    "eslint": "^9.39.5",
+    "typescript": "^5",
+    "typescript-eslint": "^8.65.0"
+  }
+}

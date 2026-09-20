@@ -1,0 +1,13 @@
+# 라이브러리
+node_modules/
+
+# tsc 증분 캐시
+*.tsbuildinfo
+
+# npm pack 산출물 — 저장소에 두지 않는다
+*.tgz
+
+# 편집기
+.DS_Store
+.vscode/
+.idea/
