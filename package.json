@@ -2,11 +2,12 @@
   "name": "@dss/core",
   "version": "0.1.0",
   "private": true,
-  "description": "A/S 관리 · PO/내자 두 사이트가 같은 DB(dss_as)를 함께 보기 위해 나눠 쓰는 Drizzle 스키마. 마이그레이션은 담지 않는다 — A/S 가 소유한다.",
+  "description": "A/S 관리 · PO/내자 두 사이트가 같은 DB(dss_as)를 함께 보기 위해 나눠 쓰는 Drizzle 스키마와, 두 사이트가 한 벌로 그리는 화면 조각. 마이그레이션은 담지 않는다 — A/S 가 소유한다.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts"
+    "./schema": "./src/schema/index.ts",
+    "./ui/*": "./src/ui/*"
   },
   "files": [
     "src",
@@ -17,13 +18,21 @@
     "lint": "eslint"
   },
   "peerDependencies": {
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "next": ">=16",
+    "react": ">=19",
+    "react-dom": ">=19"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/node": "^24.13.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "drizzle-orm": "^0.45.2",
     "eslint": "^9.39.5",
+    "next": "^16.3.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "typescript": "^5",
     "typescript-eslint": "^8.65.0"
   }
