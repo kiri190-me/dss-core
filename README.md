@@ -45,10 +45,21 @@ src/
       master-data-trash-dialogs.tsx         지우기·되살리기·완전 삭제 확인 창
       master-data-trash-retention.ts        15일 보관 판정
       master-data-trash-retention-badge.tsx 「만료까지 N일」 배지
+    inventory/
+      part-picker.tsx        품명 칸에서 부품 마스터를 찾아 고르는 조각 한 벌
+      part-picker-rows.ts    그 조각이 받는 줄의 모양(타입) 둘
+      part-price-field.ts    단가를 입력 칸의 글자로 (순수 함수)
     quotes/
       quote-list-rows.ts     목록 한 줄의 모양(타입) · 종류 이름표 · 금액 곁말
       QuoteListScreen.tsx    견적서 목록 화면 한 벌
 ```
+
+🔴 **부품 고르개는 견적서 것이 아니다**(2026-09-22 옮겨 왔다). 견적서 편집 폼의
+「부품 비용」 표와 수리 건 상세의 「사용 부품」 칸이 **같은 조각**을 쓴다. A/S 안에만
+두면 PO/내자가 그 칸을 붙이는 날 사본이 생기므로 먼저 이쪽으로 옮겼다 — A/S 가
+이 묶음의 `ui/` 를 쓰는 **첫 파일**이기도 하다(조각 4 가 열 그 길을 202줄로 먼저
+열어 본 것이다). 컴포넌트 이름은 `QuotePartSuggestionList` → `PartSuggestionList`
+로 고쳤다. 지금 부르는 쪽은 A/S 둘뿐이고, **PO 에는 아직 붙이지 않았다.**
 
 🔴 **왜 화면이 여기 있나** — 견적서 목록은 **두 곳**이 그린다: PO/내자 사이트의
 [견적서] 목록과, A/S 관리 시스템의 수리 건 상세 [견적서] 탭. 복사본을 두면
@@ -75,6 +86,11 @@ src/
 `service-reports-parity`). A/S 의 시험 등록 검사가 최상위 `vendor/` 를
 건너뛰므로, 여기로 옮기면 그 시험들이 A/S 회귀에서 안 돌게 된다.
 안전망을 잃지 않으려고 일부러 두고 왔다.
+
+같은 까닭으로 **여기 있는 화면 조각의 시험도 가져다 쓰는 사이트에 둔다.**
+`responsive-list` 는 PO 가(`dss-po/src/components/common/responsive-list.test.ts`),
+부품 고르개는 A/S 가(`src/components/inventory/part-picker.test.tsx`) 돌린다 —
+그 사이트에서 **실제로 도는 그 코드**를 보게 된다.
 
 ---
 
