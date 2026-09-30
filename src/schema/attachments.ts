@@ -116,6 +116,13 @@ export const attachmentCategoryEnum = pgEnum("attachment_category", [
   // 다른 것이다 — 그쪽은 수리 건 파일의 분류 이름이고 뜻을 바꾸지 않는다.
   "SIGNED_QUOTE_PDF",
   "QUOTE_EXCEL",
+  // 제품 모델 전용 기본 자료 셋 — 파라미터 · 통전검사 · 점검표(2026-09-30). 셋 다
+  // 기타 **앞**이고 `ADD VALUE ... BEFORE 'OTHER'` 로 더해진다. 주인은 제품 모델
+  // 하나뿐이다(domain/attachment-category.ts 의 PRODUCT_MODEL_ONLY_CATEGORIES) —
+  // 접수 건 파일 탭에는 나오지 않는다.
+  "PARAMETER",
+  "POWER_TEST",
+  "CHECKLIST",
   "OTHER",
 ]);
 
