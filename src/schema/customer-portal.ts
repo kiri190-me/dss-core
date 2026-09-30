@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -371,6 +372,47 @@ export const repairCaseCustomerStatus = pgTable(
 
     /** 비고. 고객 화면에 그대로 나간다. */
     note: text("note"),
+
+    /**
+     * 고객사 양식 표에서 **사람이 줄마다 손으로 적은 값들**(키 → 글자).
+     *
+     * ■ 무엇인가
+     *
+     * 고객사들은 저마다 자기 엑셀 현황표를 쓰는데(사용자 요청 2026-09-30), 그
+     * 열 중 몇은 이 시스템에 없는 값이다 — JUSUNG 의 `PRV No.` · `Q코드` ·
+     * `Q4.Level` · `통문번호` · `수리 요청일`, ICD 의 `중국 재 수출 마감 일자`.
+     * 담당자가 「고객 안내 현황」 화면에서 비고를 적듯 그 자리에 적는다.
+     *
+     * ■ 🔴 칸을 아홉 개 만들지 않은 이유
+     *
+     * 고객사마다 열이 다르다. 칼럼으로 만들면 ICD 에만 있는 칸이 JUSUNG 줄에도
+     * 서고, 고객사가 하나 늘 때마다 마이그레이션이 하나 는다. 어느 키가 뜻이
+     * 있는지는 **코드가 갖는** 고객사 양식이 정하고
+     * (src/lib/domain/customer-portal-forms.ts), 이 칸은 값만 담는다 — 화면
+     * 토큰(ui-theme-tokens.ts)이 쓰는 방식과 같다.
+     *
+     * ■ 🔴 아무 키나 들어오지 않는다
+     *
+     * 저장하는 길이 하나뿐이고(actions/customer-portal.ts 의
+     * setCustomerStatusAction) 그 길이 **서버가 접수에서 거슬러 올라가 찾은
+     * 고객사**의 양식으로 키를 거른다. 양식에 없는 키는 조용히 버려진다. 값
+     * 길이 상한도 그 자리에서 막는다.
+     *
+     * ■ 빈 값은 담기지 않는다
+     *
+     * 빈 문자열은 키째로 지워 넣는다 — 표의 한 칸이라 "빈 값"과 "안 적음"을
+     * 구별할 일이 없고, 구별하지 않으면 jsonb 가 빈 글자로 부푼다. 아무것도
+     * 안 적은 줄은 `{}` 다.
+     *
+     * ■ 고객에게 나가지 않는다
+     *
+     * 밖으로 보내는 자리(server/services/customer-portal-sync.ts)가 줄을 통째로
+     * 펼치지 않고 보낼 칸을 하나씩 적어 옮기는데, 이 값은 그 목록에 없다.
+     */
+    formValues: jsonb("form_values")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
 
     /** 낙관적 잠금. 두 담당자가 같은 건을 동시에 고칠 때 뒤엣것이 앞엣것을 조용히 덮지 않게. */
     version: integer("version").notNull().default(1),
