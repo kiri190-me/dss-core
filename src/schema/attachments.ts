@@ -123,6 +123,21 @@ export const attachmentCategoryEnum = pgEnum("attachment_category", [
   "PARAMETER",
   "POWER_TEST",
   "CHECKLIST",
+  // 통문증(2026-10-01) — 고객사 주성엔지니어링이 발행하는 반출·환입 서류이고
+  // 장비와 함께 들어온다. 주성 것이 대표적일 뿐 **다른 고객사도 통문증을 쓴다 —
+  // 이 분류는 고객사를 가리지 않는다**(2026-10-01 사용자). 「주성 건에서만 보이게」
+  // 좁히지 말 것. 기타 **앞**이고 `ADD VALUE ... BEFORE 'OTHER'` 로
+  // 더해진다(0109) — 0097(SCREENSHOT) · 0099(견적서 두 칸) · 0106(모델 기본 자료
+  // 셋)과 같은 방식이고, 지우고 다시 만드는 일이 없다.
+  //
+  // 주인은 **접수 건 하나뿐이다**(domain/attachment-category.ts 의
+  // REPAIR_CASE_ONLY_CATEGORIES) — 들어온 그 건의 서류라 모델마다 한 벌 두는
+  // 자료가 아니고, 견적서 두 칸과도 관계가 없다. 제품 모델 · 견적서 화면에는
+  // 나오지 않는다.
+  //
+  // 영문 코드는 이 저장소가 이미 쓰는 말이다 — 통문번호를 A/S 쪽
+  // domain/customer-portal-forms.ts 가 `passNumber`(「통문번호」)로 적는다.
+  "PASS_SLIP",
   "OTHER",
 ]);
 
