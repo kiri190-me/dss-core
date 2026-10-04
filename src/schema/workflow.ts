@@ -80,6 +80,7 @@ export const repairStatusEnum = pgEnum("repair_status", [
   "WAITING_PARTS_SUPPLY",
   "WAITING_REPAIR",
   "IN_REPAIR",
+  "REPAIR_COMPLETED",
   "WAITING_SHIPMENT_APPROVAL",
   "WAITING_SHIPMENT",
   "SHIPMENT_COMPLETED",
