@@ -10,7 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { productModels } from "./product-models";
+import { productModelKindEnum, productModels } from "./product-models";
 import { quotes } from "./quotes";
 import { repairCases } from "./repair-cases";
 import { users } from "./users";
@@ -31,7 +31,7 @@ import { users } from "./users";
  * 실제 저장으로 바꾸는 첫 단계이며, **이번 단계는 표와 권한 자리를 만드는
  * 데까지다** — 업로드·다운로드·저장소 어댑터는 다음 단계다.
  *
- * ── 첨부 대상은 접수 건 · 제품 모델 · 견적서 셋이다 ──────────────────────
+ * ── 첨부 대상은 접수 건 · 제품 모델 · 견적서 · 제품 종류 넷이다 ─────────
  * 처음에는 A/S 접수 건 하나뿐이었다. 여기에 **제품 모델**(product_models)이
  * 더해졌다 — 모델의 외형 사진과 회로도를 붙이기 위해서다. 대상이 둘이 된
  * 지금도 다형 참조(owner_type + owner_id)를 쓰지 않는다: 그 구조는 외래키를
@@ -45,6 +45,13 @@ import { users } from "./users";
  * 결재 PDF 1개 + 엑셀 1개). 앞의 두 주인과 똑같은 방식이다 — NULL 허용 FK 칸 하나,
  * 부분 인덱스 하나, 기존 CHECK 를 고쳐 쓰지 않고 **따로 더한** CHECK 하나
  * (attachments_quote_owner_alone).
+ *
+ * 넷째 주인은 **제품 종류**(제너레이터 / 매쳐 / Total Controller)다(2026-10-06) —
+ * 모델 하나가 아니라 종류 전체가 공유하는 공통 서류를 붙이기 위해서다. 앞의 셋과
+ * 다른 점이 하나 있다: 이 주인은 **행이 아니라 분류**라 FK 가 없다(product_model_kind
+ * 컬럼 주석 참조). 나머지는 같은 방식이다 — NULL 허용 칸 하나, 부분 인덱스 하나,
+ * 기존 CHECK 를 고쳐 쓰지 않고 **따로 더한** CHECK 하나(attachments_kind_owner_alone).
+ * 이번 단계는 **자리를 만드는 데까지다** — 이 칸을 채우는 화면과 업로드 통로는 다음이다.
  *
  * 같은 표를 쓰는 것도 의도된 선택이다. 백업 스크립트(scripts/backup-attachments.ts)가
  * 이 표를 조건절 없이 통째로 읽고 저장 루트 전체를 훑기 때문에, 같은 표에
@@ -188,6 +195,36 @@ export const attachments = pgTable(
     // 사라지고 실물이 주인도 기록도 없이 남고, restrict 로 두면 파일이 붙은 견적서를
     // 영구 삭제할 수 없다.
     quoteId: uuid("quote_id").references(() => quotes.id, { onDelete: "set null" }),
+    /**
+     * 넷째 주인 — **제품 종류**(제너레이터 / 매쳐 / Total Controller)(2026-10-06).
+     *
+     * 🔴 **앞의 세 주인과 생김새가 다르다. 이 주인은 행이 아니라 분류다.**
+     * 그래서 FK 가 없고 ON DELETE SET NULL 도 없다 — 가리키는 대상이 다른 표의
+     * 행이 아니라 enum 값이라, 지워질 주인 행이 애초에 없다. 앞의 세 칸이
+     * SET NULL 로 지키려던 일("주인이 사라져도 파일 기록은 남는다")이 여기서는
+     * 지킬 필요가 없는 일이 된다.
+     *
+     * 왜 필요한가: 모델 하나가 아니라 **종류 전체가 공유하는 공통 서류**를 붙이기
+     * 위해서다(예: 제너레이터 공통 점검표). 바로 위 productModelId 주석이
+     * "모델 첨부는 건마다가 아니라 모델마다 한 벌"이라 적은 것과 같은 결로, 이
+     * 칸은 거기서 한 단 더 올라간다 — **종류마다 한 벌**이라, 같은 점검표를
+     * 모델 수만큼 다시 올리지 않아도 된다.
+     *
+     * enum 은 product-models.ts 의 productModelKindEnum 을 **그대로 가져다 쓴다.**
+     * 새로 만들지 않는 것은 이 저장소의 관례다 — quotes.labor_equipment_kind ·
+     * repair_task_catalog.equipment_kind · repair_labor_settings.equipment_kind ·
+     * power_test_tasks.equipment_kind 가 이미 같은 enum 을 재사용한다. 종류 목록이
+     * 늘어나는 날 한 곳만 고치면 전부 따라온다.
+     *
+     * NULL 을 허용하는 까닭: 이 칸이 생기기 전의 행은 **전부 NULL** 이고(종류를
+     * 받은 적이 없다), 주인이 접수 건·모델·견적서인 행도 이 칸은 비어 있는 것이
+     * 정상이다. 나아가 주인이 아무도 없는 행 자체가 이 표의 정상 상태다(파일
+     * 헤더의 '접수 건이 영구 삭제돼도' 항목). NOT NULL 로 둘 수 있는 값이 아니다.
+     *
+     * 이 칸을 실제로 채우는 화면·업로드 통로는 **아직 없다** — 이번 단계는 자리를
+     * 만드는 데까지다.
+     */
+    productModelKind: productModelKindEnum("product_model_kind"),
     category:attachmentCategoryEnum("category").notNull(),
     // 사용자가 올린 그대로의 이름. 표시와 다운로드 파일명으로만 쓰고, 디스크
     // 경로를 만드는 데는 절대 쓰지 않는다(파일 헤더 참조).
@@ -275,6 +312,12 @@ export const attachments = pgTable(
     index("attachments_quote_id_not_deleted_idx")
       .on(table.quoteId)
       .where(sql`is_deleted = false`),
+    // 제품 종류 공통 서류 목록이 쏘는 질의 — "이 종류의 안 지워진 첨부".
+    // 위 세 인덱스와 똑같은 모양의 부분 인덱스이고, 부분으로 두는 까닭은
+    // 맨 위 접수 건 인덱스 주석에 적어 둔 것과 같다.
+    index("attachments_product_model_kind_not_deleted_idx")
+      .on(table.productModelKind)
+      .where(sql`is_deleted = false`),
     // ── 주인은 둘일 수 없다 (하지만 없을 수는 있다) ─────────────────────
     // 파일 하나가 접수 건과 모델 양쪽에 동시에 걸리면 그 파일이 어느 폴더에
     // 사는지(stored_path 의 첫 마디가 repair-cases 인지 product-models 인지)가
@@ -302,6 +345,21 @@ export const attachments = pgTable(
     check(
       "attachments_quote_owner_alone",
       sql`${table.quoteId} IS NULL OR (${table.repairCaseId} IS NULL AND ${table.productModelId} IS NULL)`
+    ),
+    // ── 제품 종류 주인도 혼자다 (2026-10-06) ─────────────────────────────
+    // 넷째 주인(product_model_kind)이 차 있으면 앞의 세 주인은 전부 비어 있어야
+    // 한다 — 파일이 사는 폴더가 하나로 정해져야 하고, "이 파일은 종류 전체의
+    // 공통 서류"와 "이 파일은 이 모델/이 건의 것"은 동시에 참일 수 없다.
+    // 앞의 두 CHECK 는 **한 글자도 고치지 않고** 이것을 따로 더한다. 세 CHECK 를
+    // 함께 읽으면 "넷 중 둘 이상이 차는 일은 없다"가 된다.
+    //
+    // ⚠️ 여기도 **XOR 가 아니다.** 앞의 세 칸이 ON DELETE SET NULL 이라 주인 없는
+    // 행은 정상 상태다(위 attachments_owner_not_both 주석). 이 칸 자체는 FK 가
+    // 아니라 저절로 비워지는 일이 없지만, 다른 셋 때문에 생기는 "주인 없는 행"을
+    // 막아서는 안 되므로 조건을 "차 있으면 나머지는 비어 있다"로만 적는다.
+    check(
+      "attachments_kind_owner_alone",
+      sql`${table.productModelKind} IS NULL OR (${table.repairCaseId} IS NULL AND ${table.productModelId} IS NULL AND ${table.quoteId} IS NULL)`
     ),
     // 중복 업로드 판단과 디스크 실물 대조용. 부분 인덱스가 아닌 것은 일부러다 —
     // 휴지통에 있는 파일까지 찾아야 "이미 올린 파일인데 지워져 있다"를 말할 수
