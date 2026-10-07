@@ -58,19 +58,27 @@ src/
 「부품 비용」 표와 수리 건 상세의 「사용 부품」 칸이 **같은 조각**을 쓴다. A/S 안에만
 두면 PO/내자가 그 칸을 붙이는 날 사본이 생기므로 먼저 이쪽으로 옮겼다 — A/S 가
 이 묶음의 `ui/` 를 쓰는 **첫 파일**이기도 하다(조각 4 가 열 그 길을 202줄로 먼저
-열어 본 것이다). 컴포넌트 이름은 `QuotePartSuggestionList` → `PartSuggestionList`
-로 고쳤다. 지금 부르는 쪽은 A/S 둘뿐이고, **PO 에는 아직 붙이지 않았다.**
+열어 본 것이다 — 🔴 **그 길은 2026-10-07 에 열렸다.** 아래 참조). 컴포넌트 이름은
+`QuotePartSuggestionList` → `PartSuggestionList` 로 고쳤다. 🔴 **2026-09-22 부터 PO 도
+쓴다**(`dss-po/src/components/quotes/QuoteEditForm.tsx` — PO 커밋 `2821d0a`).
 
-🔴 **왜 화면이 여기 있나** — 견적서 목록은 **두 곳**이 그린다: PO/내자 사이트의
-[견적서] 목록과, A/S 관리 시스템의 수리 건 상세 [견적서] 탭. 복사본을 두면
-「금액·요약 줄이 갈라지는 날」이 오고, 그날 사람은 같은 견적서의 **다른 금액**을
-두 화면에서 보게 된다(설계서 F절 5번).
+🔴 **왜 화면이 여기 있나** — 견적서 목록은 **세 자리**가 그린다: PO/내자 사이트의
+[견적서] 목록과, A/S 관리 시스템의 [견적서] 목록 · 수리 건 상세 [견적서] 탭.
+복사본을 두면 「금액·요약 줄이 갈라지는 날」이 오고, 그날 사람은 같은 견적서의
+**다른 금액**을 두 화면에서 보게 된다(설계서 F절 5번).
 
-⚠️ **지금은 두 벌이 잠깐 공존한다.** A/S 는 아직 제 파일
-(`src/components/quotes/QuoteListScreen.tsx` 와 `src/components/common/` 의 같은
-이름 파일들)을 쓴다. A/S 를 이쪽으로 돌리는 것은 **조각 4(A/S 정리)**의 일이다 —
-한 번에 둘을 바꾸면 되돌릴 자리가 없어서, 새 사이트에서 먼저 돌려 보고 옮기기로
-했다. 그때까지 저쪽 파일을 고치면 이쪽도 함께 고칠 것.
+🔴 **2026-10-07 부터 견적서 목록 화면은 두 사이트가 함께 쓴다.** 그날 A/S 가 제
+복사본(`src/components/quotes/QuoteListScreen.tsx` 868줄)을 지우고 이쪽으로 넘어왔다
+(A/S 커밋 `287bb09`). 양쪽 다 제 저장소의 `QuoteListSlots.tsx` 에서 슬롯을 건다.
+
+⚠️ **`ui/common/` 의 다섯은 아직 두 벌이다.** A/S 가 쓰는 것은 여전히 제 파일이다 —
+`src/components/common/` 의 `responsive-list.tsx`(2026-10-07 실측 25개 파일이 쓴다) ·
+`master-data-trash-dialogs.tsx` · `master-data-trash-retention-badge.tsx` 와,
+`src/lib/domain/master-data-trash-retention.ts` · `src/lib/hooks/useTableFitsWithoutOverflow.ts`.
+A/S 가 이 묶음의 `ui/common/` 에서 가져오는 것은 **아직 하나도 없다**(견적서 목록은
+공용 화면 안에서 이쪽 `responsive-list` 를 쓴다 — 그래서 A/S 화면 중 그 탭만 이쪽
+판으로 그려진다). **A/S 가 이 다섯까지 넘어오기 전에 저쪽 파일을 고치면 이쪽도 함께
+고칠 것.**
 
 `drizzle-orm` · `react` · `next` 와 형제 파일(`./…`) 말고는 아무것도 import 하지
 않는다. 🔴 **별칭(`@/…`)을 쓰지 않는다** — 가져다 쓰는 사이트마다 다르게 설정되어
@@ -91,6 +99,14 @@ src/
 `responsive-list` 는 PO 가(`dss-po/src/components/common/responsive-list.test.ts`),
 부품 고르개는 A/S 가(`src/components/inventory/part-picker.test.tsx`) 돌린다 —
 그 사이트에서 **실제로 도는 그 코드**를 보게 된다.
+
+🔴 **견적서 목록 화면은 두 사이트가 각각 본다**(2026-10-07 부터). 이름도 같다:
+`dss-po/src/components/quotes/quote-list-screen-source.test.ts` 와
+`RF_Service_System/src/components/quotes/quote-list-screen-source.test.ts`.
+둘 다 `vendor/dss-core/src/ui/quotes/QuoteListScreen.tsx` 를 **글자로 읽는다**
+(서버 액션을 프롭으로 받는 클라이언트 컴포넌트라 러너에서 import 가 던진다).
+⚠️ 그래서 **이 파일의 주석을 고치면 양쪽 시험이 깨질 수 있다** — 두 저장소에서
+각각 돌려 볼 것. 사이트마다 거는 슬롯이 달라 단언도 갈린다.
 
 ---
 
