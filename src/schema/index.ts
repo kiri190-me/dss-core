@@ -55,3 +55,4 @@ export * from "./shipment-approval-routes";
 export * from "./inventory-part-issue-requests";
 export * from "./notification-acknowledgements";
 export * from "./product-model-kind-share-docs";
+export * from "./product-model-share-docs";
