@@ -68,6 +68,23 @@ import {
  * ⚠️ 슬롯을 **표와 카드 두 곳 모두**에 같은 값으로 건다. 한쪽만 바꾸면 창 폭에
  * 따라(ResponsiveList 가 재서 고른다) 보이는 것이 달라진다.
  *
+ * ── 🔴 결재 승인 체크는 **슬롯이 아니다** (2026-10-08) ──────────────────
+ * 「지금 내용 그대로 승인됨」 체크(✔️)는 줄의 값 하나로 그린다
+ * (`row.isApprovedForCurrentContent` — ./quote-list-rows.ts). 슬롯으로 두지 않은
+ * 까닭 셋:
+ *
+ *  ① **함수가 아니라 평범한 불리언**이라 서버 컴포넌트 경계를 그냥 건넌다. 슬롯이
+ *     생긴 이유는 「함수는 직렬화되지 않는다」 하나였다 — 값에는 그 문제가 없다.
+ *  ② **`renderFileBadges` 자리를 쓰지 않는다.** 그 자리는 이름 그대로 **파일**
+ *     딱지(엑셀 전용 · 결재 PDF · 엑셀 없음)이고, 체크는 파일이 아니라 **견적서
+ *     내용**에 대한 사실이다. 섞으면 「결재 PDF 가 붙었다」와 「승인됐다」가 같은
+ *     자리에서 같은 종류로 읽힌다 — 그 둘은 자주 어긋난다.
+ *  ③ 두 사이트가 **같은 뜻을 같은 모양으로** 보여야 한다. 사이트마다 제 조각을
+ *     끼우면 한쪽은 ✔️, 다른 쪽은 초록 글자가 되는 날이 온다.
+ *
+ * **값을 싣지 않은 사이트에서는 그려지지 않는다**(PO/내자가 지금 그렇다) — 슬롯과
+ * 같은 성질이고, 그 칸이 선택인 이유다.
+ *
  * ── 표/카드 전환 ────────────────────────────────────────────────────────
  * ResponsiveList 가 정한다 — 폭을 실제로 재서 고르고, 사람이 한 번이라도 고르면
  * 그 선택이 이긴다. 여기서 브레이크포인트를 따로 두지 않는다.
@@ -607,6 +624,8 @@ function QuoteTable({
             <td className="px-3 py-2">
               <span className="flex flex-wrap items-center gap-1.5">
                 <KindTag kind={row.kind} />
+                {/* 🔴 지금 내용 그대로 승인된 장에만(2026-10-08) — 카드와 같은 조각이다. */}
+                <QuoteApprovedCheck row={row} />
                 {/* 엑셀 전용 · 결재 PDF · 엑셀 없음(2026-09-15 Q3) — 카드와 같은 슬롯이다. */}
                 {renderFileBadges?.(row)}
                 <SummaryLine row={row} rowHref={rowHref} className="font-medium" />
@@ -654,6 +673,8 @@ function QuoteCardList({
         >
           <span className="flex flex-wrap items-center gap-1.5">
             <KindTag kind={row.kind} />
+            {/* 🔴 표와 같은 조각 — 창 폭에 따라 체크가 있다 없다 하면 안 된다(2026-10-08). */}
+            <QuoteApprovedCheck row={row} />
             {/* 표와 같은 슬롯 — 창 폭에 따라 표시가 달라지지 않게. flex-wrap 이라 좁으면 줄바꿈된다. */}
             {renderFileBadges?.(row)}
             <SummaryLine row={row} rowHref={rowHref} className="text-sm font-medium" />
@@ -737,6 +758,46 @@ function DeleteButton({
     >
       {busyId === row.id ? "지우는 중…" : "삭제"}
     </button>
+  );
+}
+
+/**
+ * 🔴 체크에 붙는 **뜻**. 화면낭독기가 「✔️」만 읽으면 무슨 표시인지 알 수 없고,
+ * 마우스를 올린 사람도 마찬가지다 — 그래서 같은 문장을 `title`(눈)과
+ * `aria-label`(귀) 두 곳에 건다. `role="img"` 는 이 글자 하나가 통째로 그림 하나라는
+ * 표시다(PieChart 가 <svg> 에 쓰는 것과 같은 자리).
+ *
+ * 🔴 문장이 **「승인된 적이 있다」가 아니라 「지금 이 내용 그대로」** 라고 말한다.
+ * 체크가 붙지 않는 이유가 대부분 「승인 뒤에 견적서를 고쳤다」이기 때문이다 —
+ * 그 사람에게 이 문장이 「그럼 내 것은 왜 없지」의 답이 된다.
+ */
+export const QUOTE_APPROVED_CHECK_LABEL = "지금 이 내용 그대로 결재 승인된 견적서입니다";
+
+/**
+ * 「지금 내용 그대로 승인됨」 체크 — 🔴 **참일 때만 그린다.**
+ *
+ * 🔴 `=== true` 로 보는 것은 일부러다. 값을 싣지 않은 사이트에서는 `undefined` 가
+ * 오고(PO/내자가 지금 그렇다), 그때 그려서는 안 된다 — 거짓처럼 생긴 값을 「없으니
+ * 일단 그린다」로 접으면 아무 판정도 하지 않은 목록에 체크가 깔린다.
+ *
+ * 🔴 **낡은 승인은 여기 오지 않는다.** 그 갈림은 값을 싣는 쪽이 이미 했다
+ * (./quote-list-rows.ts 의 isApprovedForCurrentContent) — 이 조각은 다시 판정하지
+ * 않는다. 두 곳에서 판정하면 한쪽만 고쳐지는 날이 온다.
+ *
+ * 색만으로 가르지 않는다 — 글자(✔️)가 먼저고 색은 거들 뿐이다. 흑백 인쇄와 색각
+ * 이상에서도 표시가 남아야 한다.
+ */
+export function QuoteApprovedCheck({ row }: { row: QuoteListItem }) {
+  if (row.isApprovedForCurrentContent !== true) return null;
+  return (
+    <span
+      role="img"
+      aria-label={QUOTE_APPROVED_CHECK_LABEL}
+      title={QUOTE_APPROVED_CHECK_LABEL}
+      className="text-sm leading-none text-green-700 dark:text-green-400"
+    >
+      ✔️
+    </span>
   );
 }
 

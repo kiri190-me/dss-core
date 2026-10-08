@@ -103,6 +103,26 @@ export type QuoteListItem = {
    */
   hasSignedPdf: boolean;
   hasExcel: boolean;
+  /**
+   * 🔴 **「지금 이 내용 그대로 결재 승인됐는가」** — 참일 때만 줄에 체크(✔️)가 붙는다
+   * (2026-10-08 사용자 요구: "결재 승인된 견적서에 체크 표시가 보이게").
+   *
+   * 🔴 **선택이다 — 넘기지 않으면 체크를 그리지 않는다.** PO/내자 사이트는 아직 이 값을
+   * 싣지 않고, 실어 보내기 전까지 그 목록은 지금과 **한 글자도 달라지지 않아야 한다.**
+   * 그래서 `boolean | undefined` 이고, 화면은 `=== true` 일 때만 그린다.
+   *
+   * 🔴 **판정을 여기서 하지 않는다.** 결재 상태는 판 번호(`quotes.version`)와 결재선
+   * 단계를 아는 **A/S 쪽 구조**가 정한다(그 저장소의 domain/quote-approval-rules.ts 의
+   * `resolveQuoteApprovalState`). 이 묶음은 DB 도 그 표도 모른다(파일 머리말) — 넘어오는
+   * 것은 그 판정의 **답 하나**뿐이다.
+   *
+   * 🔴 **이름이 곧 약속이다 — 「승인된 적이 있는가」가 아니다.** 승인을 받은 **뒤에
+   * 견적서가 바뀐** 장(A/S 의 `APPROVED_OUTDATED`)은 **거짓**이다. 그 갈림이 이 값이
+   * 존재하는 이유다: `isApproved` 같은 모호한 이름이었다면 다음 사람이 낡은 승인까지
+   * 참으로 넣고, 그러면 승인 뒤 금액을 고친 견적서에 체크가 그대로 남는다. 결재 중
+   * (`PENDING`) · 반려(`REJECTED`) · 올린 적 없음(`NOT_REQUESTED`)도 모두 거짓이다.
+   */
+  isApprovedForCurrentContent?: boolean;
 };
 
 /**
