@@ -1,7 +1,12 @@
 "use client";
 
 import type { PartPickerPriceRow, PartPickerRow } from "./part-picker-rows";
-import { partFieldValue } from "./part-picker-rows";
+import {
+  PART_FIELD_LABELS,
+  partFieldEntries,
+  partFieldValue,
+  partFieldValueText,
+} from "./part-picker-rows";
 import { toPriceFieldValue } from "./part-price-field";
 
 /**
@@ -233,26 +238,23 @@ export function partPickPatch(
 }
 
 /**
- * 후보 한 줄의 꼬리표 — 품명 말고 **무엇으로 찾았는지**가 보여야 같은 이름이 여럿일 때
+ * 후보 한 줄의 **꼬리표** — 품명 말고 **무엇으로 찾았는지**가 보여야 같은 이름이 여럿일 때
  * 고를 수 있다. 비어 있는 칸은 자리만 차지하므로 빼고 잇는다(🔴 `-` 만 적힌 칸도 빈 칸이다 —
  * `partFieldValue`. `- · - · -` 가 줄을 채우면 정작 있는 값이 묻힌다).
  *
- * 🔴 **거르는 칸과 같은 것들을 적는다.** 고객사 품명으로 찾았는데 꼬리표에 그 글자가
- *    없으면, 사람은 왜 이 줄이 떴는지 알 수 없어 고르기를 망설인다(2026-10-16).
+ * 🔴 **차례는 여기서 정하지 않는다** — `./part-picker-rows.ts` 의 `PART_FIELD_ORDER` 하나가
+ *    쥔다(2026-10-16 요청 ③: 「어디서든 같은 순서」). 그래서 꼬리표에 남는 것은 **품명2 ·
+ *    교산 품번 · 도번**이고, 그 차례도 그 목록이 정한 그대로다.
  *
- * 🔵 `nameSource` 가 `"customer"` 인 화면에서는 **고객사 품명을 꼬리표에서 뺀다** — 그 화면은
- *    그 이름을 **꼬리표가 아니라 제 줄에 이름표를 달아** 보여 주기 때문이다(아래 목록). 같은
- *    글자가 한 줄에 두 번 나오면 어느 것이 적힐 이름인지 더 헷갈린다.
+ * 🔴 **고객사 품명과 품명은 여기 오지 않는다** — 둘은 줄의 **머리**라 아래 목록이 따로 그린다
+ *    (고객사 품명은 제 줄에 이름표를 달고 맨 위, 품명은 그 다음 줄의 첫 글자). 같은 글자가 한
+ *    줄에 두 번 나오면 어느 것이 적힐 이름인지 더 헷갈린다.
+ *
+ * 🔵 `nameSource` 는 이제 꼬리표를 가르지 않는다 — 두 모양이 같아졌다. 받는 자리만 남겨 둔다
+ *    (가져다 쓰는 사이트가 넘기고 있을 수 있어, 지우면 그쪽이 컴파일에서 깨진다).
  */
-export function partOptionDetail(option: PartPickerRow, nameSource: PartNameSource = "part"): string {
-  const pieces =
-    nameSource === "customer"
-      ? [option.partSpec, option.drawingNo, option.kyosanPartNo]
-      : [option.partSpec, option.customerPartName, option.drawingNo, option.kyosanPartNo];
-  return pieces
-    .map((value) => partFieldValue(value))
-    .filter((value) => value !== "")
-    .join(" · ");
+export function partOptionDetail(option: PartPickerRow, _nameSource: PartNameSource = "part"): string {
+  return partFieldValueText(partFieldEntries(option, { exclude: ["customerPartName", "partName"] }));
 }
 
 /**
@@ -262,10 +264,21 @@ export function partOptionDetail(option: PartPickerRow, nameSource: PartNameSour
  *    먼저 포커스를 잃어(onBlur) 목록이 닫히고, 그러면 `onClick` 이 닿을 곳이 없어진다.
  *    「눌리지 않는 목록」이 되는 흔한 함정이라 여기서 못 박는다.
  *
- * 🔴 **줄의 생김새를 갈아엎지 않는다**(2026-10-16). `nameSource` 를 안 넘기는 사이트에는
- *    예전 그대로 **품명 + 꼬리표** 한 줄이고, 넘긴 화면에만 밑에 **작은 줄 하나**가 더 붙는다 —
- *    「고객사 품명 · …」, 또는 비어 있으면 왜 못 고르는지. 더하기만 하므로 PO/내자가 포인터를
- *    올리는 날에도 그쪽 줄은 한 글자도 달라지지 않는다.
+ * 🔴 **줄의 생김새를 갈아엎지 않는다**(2026-10-16). 줄의 뼈대는 그대로 **품명 + 꼬리표** 한
+ *    줄이고, 그 **위에 작은 줄 하나**가 더 붙을 뿐이다 — 「고객사 품명 · …」. 더하기만 한다.
+ *
+ * ── 🔴 고객사 품명이 **맨 위**에 온다 (2026-10-16 요청 ③) ──────────────────
+ * 사용자 요청: 「어디서든 부품 검색 결과는 **고객사 품명 · 품명 · 품명2 · 교산 품번 · 도번**
+ * 순서로.」 그래서 그 줄이 품명 줄 **위**에 선다. 차례를 적는 자리는 한 곳이다
+ * (`./part-picker-rows.ts` 의 `PART_FIELD_ORDER`).
+ *
+ * 🔵 **그 칸이 없는 사이트(PO/내자)는 한 줄도 늘지 않는다** — 줄에 고객사 품명이 아예 없으면
+ *    (`customerPartName` 은 선택이다) 이 줄은 그려지지 않는다. 그쪽에서 달라지는 것은 꼬리표
+ *    안의 **교산 품번 · 도번 차례**뿐이고, 그것이 바로 ③ 이 맞추라고 한 그 차례다.
+ *
+ * 🔴 **까닭을 적는 것은 `"customer"` 화면뿐이다** — 거기서만 그 칸이 비면 **고를 수 없기**
+ *    때문이다. 기본 화면에서는 비어도 고를 수 있으니 「없다」를 적을 까닭이 없다(적으면
+ *    고르지 말라는 말로 읽힌다).
  */
 export function PartSuggestionList({
   options,
@@ -291,8 +304,11 @@ export function PartSuggestionList({
       className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-md border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
     >
       {options.map((option) => {
-        const detail = partOptionDetail(option, nameSource);
+        const detail = partOptionDetail(option);
         const pickable = canPickPartOption(option, nameSource);
+        /* 🔴 고객사 품명은 **`partPickName` 과 같은 자**로 잰다 — 자가 둘이면 「이름이 있다」고
+           그려 놓고 고르면 빈 이름이 들어가는 줄이 생긴다. */
+        const customerPartName = partPickName(option, "customer");
         return (
           <li key={option.id} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800">
             <button
@@ -306,27 +322,29 @@ export function PartSuggestionList({
               disabled={!pickable}
               className="block w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:disabled:bg-zinc-900/60 dark:disabled:hover:bg-zinc-900/60"
             >
-              <span className={pickable ? "text-zinc-900 dark:text-zinc-50" : "text-zinc-400 dark:text-zinc-500"}>
-                {option.partName}
-              </span>
-              {detail !== "" && (
-                <span className="ml-2 text-zinc-500 dark:text-zinc-400">{detail}</span>
-              )}
-              {/* 🔵 고객사 품명으로 적는 화면에서만 붙는 작은 줄. 있으면 **적힐 이름**을 보여 주고
-                  (꼬리표에 섞어 두면 어느 것이 적힐 이름인지 모른다), 없으면 **까닭**을 적는다. */}
-              {nameSource === "customer" && (
-                <span
-                  className={
-                    pickable
-                      ? "block text-zinc-500 dark:text-zinc-400"
-                      : "block text-amber-700 dark:text-amber-400"
-                  }
-                >
-                  {pickable
-                    ? `고객사 품명 · ${partPickName(option, "customer")}`
-                    : CUSTOMER_PART_NAME_REQUIRED_MESSAGE}
+              {/* 🔴 ① 고객사 품명 — 정해진 차례의 **맨 앞**이라 품명 줄 위에 선다(머리말 ③).
+                  값이 있으면 이름표를 달아 보여 주고, 없으면 `"customer"` 화면에서만 **까닭**을
+                  적는다(거기서만 못 고른다). 그 칸이 아예 없는 사이트에는 이 줄이 안 생긴다. */}
+              {customerPartName !== "" ? (
+                <span className="block text-zinc-500 dark:text-zinc-400">
+                  {PART_FIELD_LABELS.customerPartName} · {customerPartName}
                 </span>
+              ) : (
+                nameSource === "customer" && (
+                  <span className="block text-amber-700 dark:text-amber-400">
+                    {CUSTOMER_PART_NAME_REQUIRED_MESSAGE}
+                  </span>
+                )
               )}
+              {/* ② 품명 + 꼬리표(품명2 · 교산 품번 · 도번) — 예전 그대로의 그 한 줄이다. */}
+              <span className="block">
+                <span className={pickable ? "text-zinc-900 dark:text-zinc-50" : "text-zinc-400 dark:text-zinc-500"}>
+                  {option.partName}
+                </span>
+                {detail !== "" && (
+                  <span className="ml-2 text-zinc-500 dark:text-zinc-400">{detail}</span>
+                )}
+              </span>
             </button>
           </li>
         );

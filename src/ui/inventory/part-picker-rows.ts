@@ -96,3 +96,87 @@ export function partFieldValue(raw: string | null | undefined): string {
   const text = (raw ?? "").trim();
   return DASH_ONLY.test(text) ? "" : text;
 }
+
+/**
+ * ============================================================================
+ * 🔴 부품을 **어떤 차례로 보이는가** — 적는 자리는 **여기 하나**다 (2026-10-16 요청 ③)
+ * ============================================================================
+ * 사용자 요청: 「**어디서든** 부품 검색 결과는 **고객사 품명 · 품명 · 품명2 · 교산 품번 ·
+ * 도번** 순서로 보이게.」 그릴 자리가 다섯이다 — 견적서 고르개 · 사용 부품 고르개 · 부품
+ * 요청의 찾은 줄 · 담은 줄 · 견적서 줄의 상세. 다섯 군데에 차례를 적어 두면 **언젠가 갈린다**:
+ * 한 곳만 칸을 더하거나 자리를 바꿔도 아무도 모르고, 같은 부품이 화면마다 다르게 읽힌다.
+ *
+ * 그래서 차례와 이름표를 **이 파일 한 곳**에 둔다. 여기인 까닭:
+ *  · 고르개(`./part-picker.tsx`)가 바로 곁에서 쓴다 — 그 조각은 PO/내자와 한 벌이다.
+ *  · A/S 의 부품 요청 칸도 이 파일을 이미 쓰고 있다(`partFieldValue` 를 빌리는 그 자리,
+ *    `src/lib/domain/inventory-gateway.ts`) — react 도 DB 도 물지 않는 순수 모듈이라
+ *    서버 쪽에서 불러도 아무것도 딸려 오지 않는다.
+ *
+ * 🔵 **값이 있는 것만 그리는 규칙은 그대로다** — 아래 `partFieldEntries` 가 `partFieldValue`
+ *    로 재어 빈 칸(🔴 `-` 만 적힌 칸까지)을 **아예 빼고** 돌려준다.
+ * 🔵 **그리는 모양은 쓰는 쪽이 정한다** — 여기서는 「무엇을 · 어떤 이름표로 · 어떤 차례로」
+ *    까지만 정한다. 한 줄로 이을지 석 줄로 나눌지는 화면의 몫이다.
+ * ============================================================================
+ */
+export const PART_FIELD_ORDER = [
+  "customerPartName",
+  "partName",
+  "partSpec",
+  "kyosanPartNo",
+  "drawingNo",
+] as const;
+
+export type PartFieldKey = (typeof PART_FIELD_ORDER)[number];
+
+/**
+ * 칸마다의 이름표. 🔴 **값만 이으면 어느 것이 교산 품번이고 어느 것이 도번인지 모른다** —
+ * 사람이 그 둘을 서로 다른 데 쓴다. 이름표를 붙일지 말지는 화면이 고르지만, 붙인다면
+ * **이 글자**를 쓴다(화면마다 다른 말을 적으면 같은 칸이 다른 칸으로 읽힌다).
+ */
+export const PART_FIELD_LABELS: Record<PartFieldKey, string> = {
+  customerPartName: "고객사 품명",
+  partName: "품명",
+  partSpec: "품명2",
+  kyosanPartNo: "교산 품번",
+  drawingNo: "도번",
+};
+
+export type PartFieldEntry = { key: PartFieldKey; label: string; value: string };
+
+/** 다섯 칸의 날값. 🔵 **전부 선택이다** — 줄에 그 칸이 없는 사이트(PO/내자)가 있다. */
+export type PartFieldValues = Partial<Record<PartFieldKey, string | null | undefined>>;
+
+/**
+ * 그 부품의 **보일 칸들**을 정해진 차례로. 🔴 **값이 없는 칸은 아예 빠진다**(`-` 만 적힌 칸도
+ * 없는 칸이다 — 위 `partFieldValue`).
+ *
+ * `exclude` 는 **그 화면이 다른 자리에 따로 그리는 칸**을 빼는 데 쓴다 — 같은 글자가 한 줄에
+ * 두 번 나오면 어느 것이 무엇인지 더 헷갈린다. 🔴 **차례를 바꾸는 데 쓰는 값이 아니다.**
+ */
+export function partFieldEntries(
+  values: PartFieldValues,
+  options: { exclude?: readonly PartFieldKey[] } = {}
+): PartFieldEntry[] {
+  const exclude = options.exclude ?? [];
+  const entries: PartFieldEntry[] = [];
+  for (const key of PART_FIELD_ORDER) {
+    if (exclude.includes(key)) continue;
+    const value = partFieldValue(values[key]);
+    if (value === "") continue;
+    entries.push({ key, label: PART_FIELD_LABELS[key], value });
+  }
+  return entries;
+}
+
+/** 칸 사이를 잇는 글자. 🔴 화면마다 다른 글자로 이으면 같은 줄이 다른 줄로 보인다. */
+export const PART_FIELD_SEPARATOR = " · ";
+
+/** 값만 이어 한 줄로 — 이름표 없이. 어느 칸인지가 자리로 읽히는 자리(고르개 꼬리표)에서 쓴다. */
+export function partFieldValueText(entries: readonly PartFieldEntry[]): string {
+  return entries.map((entry) => entry.value).join(PART_FIELD_SEPARATOR);
+}
+
+/** 이름표를 달아 이어 한 줄로. 칸이 섞여 있어 자리만으로는 못 가리는 자리에서 쓴다. */
+export function partFieldLabeledText(entries: readonly PartFieldEntry[]): string {
+  return entries.map((entry) => `${entry.label} ${entry.value}`).join(PART_FIELD_SEPARATOR);
+}
