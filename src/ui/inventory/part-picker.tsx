@@ -1,6 +1,7 @@
 "use client";
 
 import type { PartPickerPriceRow, PartPickerRow } from "./part-picker-rows";
+import { partFieldValue } from "./part-picker-rows";
 import { toPriceFieldValue } from "./part-price-field";
 
 /**
@@ -18,24 +19,35 @@ import { toPriceFieldValue } from "./part-price-field";
  * `QuotePartSuggestionList` → `PartSuggestionList` 로 고쳤다 — A/S 안에만 두면
  * PO/내자가 같은 고르개를 붙이는 날 **사본이 생긴다**(README 53줄 부근의 그 위험).
  *
+ * ── 🔴 **이 조각은 자료를 스스로 부르지 않는다** ────────────────────────────
+ * 줄을 받아 거르고 그릴 뿐이다. 그 줄을 어디서 읽어 오는가는 **화면의 서버 쪽**이
+ * 정한다 — 그래서 A/S 가 2026-10-16 에 제 부품 표에서 **재고 관리**(저쪽 API.md 2절)로
+ * 갈아탈 때 이 파일은 거르는 칸 하나와 꼬리표만 늘었다. 부품 마스터를 재고 관리 하나로
+ * 모으기로 한 2026-10-02 결정이 그 까닭이고, PO/내자는 아직 제 표에서 읽는다.
+ *
  * ── 거르기는 **브라우저에서** 한다 ──────────────────────────────────────────
- * 부품 마스터는 백 줄 안쪽이다. 페이지가 목록을 통째로 한 번 내려보내고
- * (사이트의 getPartPickerList) 여기서 거른다 — 글자마다 서버를 부르면 느리고,
- * 지운 글자만큼 응답이 엇갈려 도착한다. 수리 건 상세의 부품 요청 칸(A/S
- * components/inventory/PartRequestSection.tsx)이 쓰는 방식 그대로다.
+ * 부품 목록은 수백 줄 안쪽이다. 페이지가 목록을 통째로 한 번 내려보내고 여기서
+ * 거른다 — 글자마다 서버를 부르면 느리고, 지운 글자만큼 응답이 엇갈려 도착한다.
+ * 수리 건 상세의 부품 요청 칸(A/S components/inventory/PartRequestSection.tsx)이
+ * 쓰는 방식 그대로다.
  *
  * ── 🔴 재고 · 소유구분 · 내부 비고는 여기 오지 않는다 ───────────────────────
  * 이 조각이 받는 줄(PartPickerRow)에는 그 칸이 **아예 없다.** 화면에서 안 그리는
- * 것으로는 모자란다 — 조회가 이미 실어 보낸 뒤이기 때문이다. 그래서 가벼운 형제
- * 조회를 따로 두었고(같은 파일의 getPartList 는 손대지 않았다), 이 조각은 그
- * 형제가 주는 다섯 칸(id + 네 가지)만 안다.
+ * 것으로는 모자란다 — 주는 쪽이 이미 실어 보낸 뒤이기 때문이다. 그래서 이 조각은
+ * **id + 다섯 가지**(품명 · 품명2 · 고객사 품명 · 도번 · 교산 품번)만 안다. 떼어 내는
+ * 자리는 주는 쪽이다 — A/S 는 받아 온 재고 관리의 부품에서 그 셋을 떼고 넘기고
+ * (domain/inventory-gateway.ts 의 toPartPickerRows), PO/내자는 재고를 조인하지 않는
+ * 가벼운 형제 조회를 따로 둔다.
  *
- * 단가도 같은 경계 안이다 — 나중에 더한 「고르면 단가도 채운다」는 **단가만 담은 별도
- * 목록**(getPartPickerUnitPrices)을 받고, 그 목록에도 재고 · 소유구분 · 비고가 없다.
+ * 단가도 같은 경계 안이다 — 「고르면 단가도 채운다」는 **단가만 담은 별도 목록**을 받고,
+ * 그 목록에도 재고 · 소유구분 · 비고가 없다. 🔴 단가 칸이 **없는** 화면(수리 건의 사용
+ * 부품)에는 그 목록을 아예 넘기지 않는다 — 금액이 나갈 자리가 아니다.
  *
  * ── 🔴 손으로 적는 길은 그대로다 ────────────────────────────────────────────
- * 고르면 붙고(partId), 글자를 고치면 풀린다(partId = null). 마스터에 없는 부품 ·
- * 케이블 부속은 지금까지처럼 그냥 적으면 되고, 그 줄은 part_id 없이 저장된다.
+ * 마스터에 없는 부품 · 케이블 부속은 지금까지처럼 그냥 적으면 되고, 그 줄은 part_id
+ * 없이 저장된다. 고른 값을 **어디에 적는지**는 폼이 정한다 — 제 표에서 읽는 사이트는
+ * 고르면 붙이고 글자를 고치면 푼다(partId = null). 🔴 A/S 는 2026-10-16 부터 재고
+ * 관리의 부품을 고르므로 **붙일 FK 가 없어** 언제나 비운다(partPickPatch 머리말).
  * ============================================================================
  */
 
@@ -46,9 +58,65 @@ import { toPriceFieldValue } from "./part-price-field";
 export const MAX_PART_SUGGESTIONS = 8;
 
 /**
- * 네 가지로 거른다 — **품명 · 품명2(규격) · 도번 · 교산 품번**. 재고 조회가 서버에서
- * 거르는 네 칸과 같다(사이트의 queries/inventory.ts 의 getPartList 검색 조건). 같은 네
- * 가지라야 「재고에서 찾던 대로 치면 여기서도 나온다」가 된다.
+ * ============================================================================
+ * 고른 줄에 **어느 이름**을 적는가 — 🔴 쓰는 쪽이 정해 넘긴다 (2026-10-16)
+ * ============================================================================
+ * 이 고르개를 쓰는 화면이 셋이고, 그중 **견적서만** 고객사에 나간다. 2026-10-16 사용자
+ * 요청은 「견적서에 노출되는 품명이 **고객사 품명**이 되게」였다 — 우리 품명과 고객사가
+ * 부르는 이름이 다르기 때문이다.
+ *
+ * ── 🔴 그 사정을 이 조각 안에 박지 않는다 ──────────────────────────────────
+ * 고르개는 PO/내자와 **한 벌**이다(이 파일 머리말). 「고객사 품명을 쓴다」를 여기 박으면
+ * 그쪽이 포인터를 올리는 날 PO 의 품명이 통째로 바뀐다. 그래서 **무엇을 쓸지도, 막을지
+ * 말지도 받는 값 하나**(`nameSource`)로 두고 **기본값은 지금까지 그대로**(`"part"`)다 —
+ * 아무것도 넘기지 않는 사이트는 한 글자도 달라지지 않는다.
+ *
+ * ── 🔴 비어 있으면 **고를 수 없다**(견적서 쪽 결정) ────────────────────────
+ * 고객사 품명이 없는 부품을 고르면 줄이 빈 이름으로 채워지거나, 우리 품명이 슬쩍 대신
+ * 들어가 **고객사가 모르는 이름**이 서류에 찍힌다. 둘 다 아무도 눈치채지 못한다. 그래서
+ * 그런 줄은 **고를 수 없게** 하고 까닭을 그 자리에 적는다.
+ * 🔵 **목록에서 감추지는 않는다** — 「있는데 못 고른다」와 「아예 없다」는 다른 말이고, 뒤로
+ *    읽히면 사람은 부품을 손으로 적어 버린다(채워 넣을 길이 바로 옆에 있는데도).
+ * 🔵 채우는 길은 **부품 요청 칸**에 있다(A/S PartRequestSection) — 이 조각의 일이 아니다.
+ * ============================================================================
+ */
+export type PartNameSource = "part" | "customer";
+
+/** 고객사 품명이 비어 있어 고를 수 없는 줄에 적는 말. 🔴 **고치는 길을 아는 사람의 말투**다. */
+export const CUSTOMER_PART_NAME_REQUIRED_MESSAGE = "고객사 품명을 설정해 주세요";
+
+/**
+ * 이 화면이 그 줄에 적을 **이름**. 없으면 빈 글자다.
+ *
+ * 🔴 **고객사 품명이 없을 때 우리 품명으로 때우지 않는다.** 때우면 고객사가 모르는 이름이
+ *    견적서에 찍히고, 빈칸과 달리 **그럴듯해 보여서** 아무도 되묻지 않는다. 비면 빈 채로
+ *    두고, 고르는 자리에서 막는다(아래 `canPickPartOption`).
+ */
+export function partPickName(option: PartPickerRow, nameSource: PartNameSource = "part"): string {
+  return nameSource === "customer"
+    ? partFieldValue(option.customerPartName)
+    : partFieldValue(option.partName);
+}
+
+/**
+ * 이 줄을 **고를 수 있는가**. 🔴 `partPickName` 으로 **재서** 답한다 — 두 곳에 규칙을 적으면
+ * 언젠가 한쪽만 바뀌어, 고를 수는 있는데 빈 이름이 들어가는 줄이 생긴다.
+ *
+ * 🔵 기본(`"part"`)에서는 사실상 언제나 참이다 — 품명이 빈 줄은 주는 쪽이 이미 버린다.
+ */
+export function canPickPartOption(option: PartPickerRow, nameSource: PartNameSource = "part"): boolean {
+  return partPickName(option, nameSource) !== "";
+}
+
+/**
+ * 다섯 가지로 거른다 — **품명 · 품명2(규격) · 고객사 품명 · 도번 · 교산 품번**. 재고를
+ * 찾는 자리가 서버에서 거르는 칸과 같다(재고 관리 API.md 2절의 `q`, 그리고 A/S 부품 요청
+ * 칸의 `filterInventoryParts`). 같은 잣대라야 「재고에서 찾던 대로 치면 여기서도 나온다」가
+ * 된다.
+ *
+ * 🔴 **고객사 품명은 2026-10-16 에 더했다.** 고객사에 나가는 서류에 쓰는 이름이라 사람이
+ *    그 이름으로 찾는다 — 그런데 지금까지는 그 글자로 아무것도 안 나왔다. 줄에 그 칸이
+ *    아예 없는 사이트(제 표에서 읽는 쪽)에서는 지금까지처럼 네 가지로 걸린다.
  *
  * 🔴 빈 글자면 **아무것도 돌려주지 않는다** — 칸을 누르자마자 목록이 통째로 펼쳐지면
  *    밑줄을 가린다. 사람이 무언가 친 뒤에만 후보가 뜬다.
@@ -63,6 +131,7 @@ export function filterPartOptions(
     (option) =>
       option.partName.toLowerCase().includes(term) ||
       (option.partSpec ?? "").toLowerCase().includes(term) ||
+      (option.customerPartName ?? "").toLowerCase().includes(term) ||
       (option.drawingNo ?? "").toLowerCase().includes(term) ||
       (option.kyosanPartNo ?? "").toLowerCase().includes(term)
   );
@@ -141,23 +210,47 @@ export function partPickUnitPrice(partId: string, context: PartPickPriceContext 
  * 품명은 마스터의 품명 그대로다 — 부품 요청 칸이 장바구니에 담는 값과 같게 둔다
  * (A/S PartRequestSection 의 addToCart). 담긴 뒤에는 손으로 고칠 수 있고, 고치면 연결이
  * 풀린다(그 규칙은 폼의 onChange 에 있다).
+ *
+ * 🔴 **어느 이름을 적을지는 `nameSource` 가 정하고, 그 값은 쓰는 쪽이 넘긴다**(2026-10-16 —
+ * 견적서만 `"customer"`). 안 넘기면 지금까지 그대로 우리 품명이다. 🔴 **고객사 품명이 빈 줄에
+ * 이것을 부르면 빈 글자가 돌아온다** — 그런 줄은 목록에서 **고를 수 없게** 막혀 있어 여기까지
+ * 오지 않는다(`canPickPartOption`). 막힌 줄을 억지로 넘기면 적어 둔 품명이 지워지므로, 두
+ * 규칙은 언제나 같은 자(`partPickName`)로 잰다.
+ *
+ * 🔴 **`partId` 는 「고른 줄의 id」일 뿐, 「DB 에 적을 값」이 아니다.** 어디에 저장할지는
+ * 폼이 정한다 — A/S 는 2026-10-16 부터 재고 관리의 부품을 고르는데, 그 부품에는 A/S 의
+ * `parts.id` 가 **없어서** 이 값을 FK 칸에 넣지 않고 폼이 `partId: null` 로 덮어쓴다.
+ * 제 표에서 읽는 사이트(PO/내자)는 지금까지처럼 그대로 적는다.
  */
 export function partPickPatch(
   option: PartPickerRow,
-  context: PartPickPriceContext = {}
+  context: PartPickPriceContext = {},
+  nameSource: PartNameSource = "part"
 ): { partNameText: string; partId: string; unitPrice?: string } {
-  const picked = { partNameText: option.partName, partId: option.id };
+  const picked = { partNameText: partPickName(option, nameSource), partId: option.id };
   const unitPrice = partPickUnitPrice(option.id, context);
   return unitPrice === null ? picked : { ...picked, unitPrice };
 }
 
 /**
  * 후보 한 줄의 꼬리표 — 품명 말고 **무엇으로 찾았는지**가 보여야 같은 이름이 여럿일 때
- * 고를 수 있다. 비어 있는 칸은 자리만 차지하므로 빼고 잇는다.
+ * 고를 수 있다. 비어 있는 칸은 자리만 차지하므로 빼고 잇는다(🔴 `-` 만 적힌 칸도 빈 칸이다 —
+ * `partFieldValue`. `- · - · -` 가 줄을 채우면 정작 있는 값이 묻힌다).
+ *
+ * 🔴 **거르는 칸과 같은 것들을 적는다.** 고객사 품명으로 찾았는데 꼬리표에 그 글자가
+ *    없으면, 사람은 왜 이 줄이 떴는지 알 수 없어 고르기를 망설인다(2026-10-16).
+ *
+ * 🔵 `nameSource` 가 `"customer"` 인 화면에서는 **고객사 품명을 꼬리표에서 뺀다** — 그 화면은
+ *    그 이름을 **꼬리표가 아니라 제 줄에 이름표를 달아** 보여 주기 때문이다(아래 목록). 같은
+ *    글자가 한 줄에 두 번 나오면 어느 것이 적힐 이름인지 더 헷갈린다.
  */
-export function partOptionDetail(option: PartPickerRow): string {
-  return [option.partSpec, option.drawingNo, option.kyosanPartNo]
-    .map((value) => value?.trim() ?? "")
+export function partOptionDetail(option: PartPickerRow, nameSource: PartNameSource = "part"): string {
+  const pieces =
+    nameSource === "customer"
+      ? [option.partSpec, option.drawingNo, option.kyosanPartNo]
+      : [option.partSpec, option.customerPartName, option.drawingNo, option.kyosanPartNo];
+  return pieces
+    .map((value) => partFieldValue(value))
     .filter((value) => value !== "")
     .join(" · ");
 }
@@ -168,16 +261,28 @@ export function partOptionDetail(option: PartPickerRow): string {
  * 🔴 `onMouseDown` 에서 기본 동작을 막는다 — 막지 않으면 후보를 누르는 순간 입력 칸이
  *    먼저 포커스를 잃어(onBlur) 목록이 닫히고, 그러면 `onClick` 이 닿을 곳이 없어진다.
  *    「눌리지 않는 목록」이 되는 흔한 함정이라 여기서 못 박는다.
+ *
+ * 🔴 **줄의 생김새를 갈아엎지 않는다**(2026-10-16). `nameSource` 를 안 넘기는 사이트에는
+ *    예전 그대로 **품명 + 꼬리표** 한 줄이고, 넘긴 화면에만 밑에 **작은 줄 하나**가 더 붙는다 —
+ *    「고객사 품명 · …」, 또는 비어 있으면 왜 못 고르는지. 더하기만 하므로 PO/내자가 포인터를
+ *    올리는 날에도 그쪽 줄은 한 글자도 달라지지 않는다.
  */
 export function PartSuggestionList({
   options,
   onPick,
   listLabel,
+  nameSource = "part",
 }: {
   options: readonly PartPickerRow[];
   onPick: (option: PartPickerRow) => void;
   /** 이 목록이 어느 줄의 것인가 — 줄 번호는 부르는 쪽이 정한다(종류별로 세는 그 번호). */
   listLabel: string;
+  /**
+   * 🔴 **고른 줄에 어느 이름을 적는가.** 안 넘기면 지금까지 그대로 우리 품명이고, 아무 줄도
+   * 막히지 않는다. `"customer"` 를 넘기면 고객사 품명이 적히고 **그 이름이 없는 줄은 눌리지
+   * 않는다**(위 `PartNameSource` 머리말).
+   */
+  nameSource?: PartNameSource;
 }) {
   if (options.length === 0) return null;
   return (
@@ -186,18 +291,41 @@ export function PartSuggestionList({
       className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-md border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
     >
       {options.map((option) => {
-        const detail = partOptionDetail(option);
+        const detail = partOptionDetail(option, nameSource);
+        const pickable = canPickPartOption(option, nameSource);
         return (
           <li key={option.id} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800">
             <button
               type="button"
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onPick(option)}
-              className="block w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              /* 🔴 `disabled` 가 진짜 울타리고, 이 한 줄은 그 울타리가 혹시 빠져도 빈 이름이
+                 줄에 들어가지 않게 하는 것이다 — 막힌 줄을 고르면 품명이 지워진다. */
+              onClick={() => {
+                if (pickable) onPick(option);
+              }}
+              disabled={!pickable}
+              className="block w-full px-3 py-1.5 text-left text-xs hover:bg-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:hover:bg-zinc-50 dark:hover:bg-zinc-800 dark:disabled:bg-zinc-900/60 dark:disabled:hover:bg-zinc-900/60"
             >
-              <span className="text-zinc-900 dark:text-zinc-50">{option.partName}</span>
+              <span className={pickable ? "text-zinc-900 dark:text-zinc-50" : "text-zinc-400 dark:text-zinc-500"}>
+                {option.partName}
+              </span>
               {detail !== "" && (
                 <span className="ml-2 text-zinc-500 dark:text-zinc-400">{detail}</span>
+              )}
+              {/* 🔵 고객사 품명으로 적는 화면에서만 붙는 작은 줄. 있으면 **적힐 이름**을 보여 주고
+                  (꼬리표에 섞어 두면 어느 것이 적힐 이름인지 모른다), 없으면 **까닭**을 적는다. */}
+              {nameSource === "customer" && (
+                <span
+                  className={
+                    pickable
+                      ? "block text-zinc-500 dark:text-zinc-400"
+                      : "block text-amber-700 dark:text-amber-400"
+                  }
+                >
+                  {pickable
+                    ? `고객사 품명 · ${partPickName(option, "customer")}`
+                    : CUSTOMER_PART_NAME_REQUIRED_MESSAGE}
+                </span>
               )}
             </button>
           </li>
