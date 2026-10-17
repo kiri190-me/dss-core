@@ -147,8 +147,19 @@ export const repairCases = pgTable(
     ),
     internalTargetShipmentDate: date("internal_target_shipment_date"),
     actualShipmentDate: date("actual_shipment_date"),
-    // Excel legacy `목록` A-column identifier. Nullable, non-unique and never
-    // auto-numbered; the future official report_number is a separate concept.
+    // Excel legacy `목록` A-column identifier — still true of every historical
+    // row, and still Nullable + **non-unique on purpose** (old values may
+    // repeat, which is why migration 0038 deliberately added no UNIQUE index;
+    // do not add one). The future official report_number is still a separate
+    // concept.
+    //
+    // 🔴 "never auto-numbered" was true until 2026-10-18 and is no longer.
+    // A/S 접수(createRepairCase)가 이 칸이 비어 있을 때 **자동으로 매긴다** —
+    // `{연도−2020}{세 자리 순번}` 네 자리(2026년 76번째 = 6076), 해가 바뀌면
+    // 001 부터 다시. 규칙은 src/lib/domain/repair-case-report-number.ts,
+    // 쓰는 자리는 src/lib/db/mutations/repair-cases.ts 다. 손으로 적어 보낸
+    // 값과 과거 Excel 이관 경로는 예전 그대로 자동 채번을 거치지 않는다.
+    // 2030년 이후와 한 해 999건 초과는 **번호를 지어내지 않고 비워 둔다**.
     legacyReportNumber: text("legacy_report_number"),
     delayReason: text("delay_reason"),
     isLocked: boolean("is_locked").notNull().default(false),
