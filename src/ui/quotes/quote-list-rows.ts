@@ -46,11 +46,21 @@ export type StoredQuoteKind = (typeof STORED_QUOTE_KINDS)[number];
  * 종류마다의 이름표. **DB 에 있을 수 있는 값을 전부 덮는다**(Record<StoredQuoteKind>) —
  * 목록이 읽어 온 값을 그대로 그리기 때문이다. 이름이 없으면 그 줄을 「종류를 알 수
  * 없음」으로 그리거나 둘 중 하나로 접어야 한다.
+ *
+ * 🔴 **이름표는 여기 말고 한 벌 더 있다** — 가져다 쓰는 사이트의
+ * `src/lib/validation/quote-input.ts`. 새 견적서 팝업과 수정 화면은 그쪽을 보고,
+ * 목록의 종류 딱지는 여기를 본다. 2026-10-19 에 `CABLE` 을 「케이블 견적서」 →
+ * 「기타 견적서」 로 바꾸면서 **A/S 쪽만 바뀌어 같은 작업 안에서 갈라졌다**(팝업은
+ * 「기타 견적서」, 목록 딱지는 「케이블 견적서」 — 커밋 하나 뒤에 발견해 바로잡았고
+ * 운영에는 안 나갔다). 지금은 A/S 의
+ * `src/lib/validation/quote-kind-labels.test.ts` 가 두 벌을 맞춰 본다 — 한쪽만
+ * 고치면 그 시험이 깨진다.
  */
 export const quoteKindLabels: Record<StoredQuoteKind, string> = {
   DOMESTIC: "내자 견적서",
   OVERHAUL: "OH 견적서",
-  CABLE: "케이블 견적서",
+  /** 2026-10-19 사용자 결정 — 케이블만 담지 않게 되어 「기타 견적서」로 넓혔다. */
+  CABLE: "기타 견적서",
 };
 
 /**
