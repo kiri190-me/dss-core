@@ -145,6 +145,20 @@ export const attachmentCategoryEnum = pgEnum("attachment_category", [
   // 영문 코드는 이 저장소가 이미 쓰는 말이다 — 통문번호를 A/S 쪽
   // domain/customer-portal-forms.ts 가 `passNumber`(「통문번호」)로 적는다.
   "PASS_SLIP",
+  // 수리 의뢰서(2026-10-19) — 고객이 수리를 맡기며 함께 보내는 의뢰 서류다.
+  // 기타 **앞**이고 `ADD VALUE ... BEFORE 'OTHER'` 로 더해진다(0118) —
+  // 0097(SCREENSHOT) · 0099(견적서 두 칸) · 0106(모델 기본 자료 셋) ·
+  // 0109(통문증)와 같은 방식이고, 지우고 다시 만드는 일이 없다.
+  //
+  // 주인은 **접수 건 하나뿐이다**(domain/attachment-category.ts 의
+  // REPAIR_CASE_ONLY_CATEGORIES — 바로 위 PASS_SLIP 과 같은 자리다). 그 건으로
+  // 들어오는 서류라 모델마다 한 벌 두는 자료가 아니고, 견적서 두 칸과도 관계가
+  // 없다. 제품 모델 · 종류 서류함 · 견적서 화면에는 나오지 않는다.
+  //
+  // 🔴 위 REPAIR_REPORT(「수리 보고서」)와 **다른 것이다.** 그쪽은 수리를 마치고
+  // **우리가 만들어 고객에게 보내는** 문서이고, 이쪽은 수리를 맡기며 **고객이
+  // 보내오는** 문서다. 코드가 닮아서 한쪽을 다른 쪽으로 고치기 쉽다 — 둘 다 남는다.
+  "REPAIR_REQUEST",
   "OTHER",
 ]);
 
