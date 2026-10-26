@@ -162,10 +162,27 @@ export const quoteApprovals = pgTable(
      * 개념 자체가 없고, 이 표의 결재자는 언제나 단계에 적힌 사람이다. 두 표의
      * 차이는 approval-route-delegations.ts 머리말에 적혀 있다.
      *
-     * 🔵 **2026-10-26 현재 이 칸을 채우는 코드는 아직 없다** — 마이그레이션 0120
-     * 은 칸만 만든다. `decideQuoteApproval`(mutations/quote-approvals.ts)이 위임
-     * 판정을 붙이면서 여기 값을 싣는 것이 다음 차례다. 그때까지 모든 줄이 NULL
-     * 이고, 그것이 「전부 직접 눌렀다」라는 참인 기록이다.
+     * 🔵 **채우는 곳은 한 곳뿐이다**(2026-10-26 연결) — 결재를 집는
+     * `decideQuoteApproval`(mutations/quote-approvals.ts)이 **지정 관문을 통과한
+     * 뒤에** 공용 함수 `delegatedFromUserIdFor`(auth/approval-assignment.ts)가
+     * 돌려준 값을 결정 칸들과 **한 번에** 싣는다. 관문에 막힐 사람의 위임을 미리
+     * 기록으로 만들어 두지 않으려고 순서가 그렇게 정해져 있다.
+     *
+     * 🔴 그 함수가 NULL 을 돌려주는 경우가 곧 「직접 눌렀다」다 — 결재권자 본인이
+     * 누른 줄, 그리고 **최고관리자 비상구**로 누른 줄. 비상구는 위임이 아니다:
+     * 한 칸에 섞어 적으면 「A 의 결재권을 받아 B 가 눌렀다」와 「막혀 있어
+     * 최고관리자가 풀었다」가 기록에서 구별되지 않는다. 뒤쪽은 지정 칸과
+     * `decided_by_user_id` 가 다르다는 것만으로 이미 드러난다.
+     *
+     * 🔵 **이 칸이 생기기 전(0120)에 쌓인 줄은 전부 NULL 이고 그대로 둔다** —
+     * 그때는 위임이라는 길 자체가 없어 전부 결재권자 본인(또는 최고관리자
+     * 비상구)이 누른 것이다. NULL 이 그 줄들에 대해서도 참인 기록이라 메워 넣을
+     * 것이 없다.
+     *
+     * 읽는 쪽은 `queries/quote-approvals.ts` 가 `users` 를 LEFT JOIN 해
+     * `delegatedFromName` 까지 실어 주고, [견적서 결재] 탭이 그 이름을 그린다
+     * (2026-10-26). 접수 건 결재를 읽는 `queries/repair-case-approvals.ts` 와
+     * **같은 모양**이다.
      *
      * 🔴 모양은 `repair_case_approvals.delegated_from_user_id` 와 **글자 그대로
      * 같다**(uuid · nullable · users.id 참조 · ON DELETE RESTRICT). 같은 사실을

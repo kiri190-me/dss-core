@@ -147,10 +147,33 @@ export const repairCaseApprovals = pgTable(
     }),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     decisionReason: text("decision_reason"),
-    // FINAL_SHIPMENT decisions only, when the deciding user acted as a
-    // delegate rather than the representative directly — see
-    // is_shipment_representative on users. Always NULL for
-    // REPAIR_INSPECTION rows (CHECK below).
+    // 「**누구 자리**를 대신 누른 것인가」 — 결재한 사람이 자기 자격이 아니라
+    // 남의 자리를 대신해 누른 경우, **그 원래 자리의 사람**이 여기 남는다.
+    // 실제로 손을 댄 사람은 decided_by_user_id 에 그대로 남는다. 「B 가 A 를
+    // 대신해 승인했다」는 두 칸을 **함께** 읽어야만 복원된다.
+    //
+    // 🔴 **이 한 칸에 위임 두 제도가 함께 적힌다**(2026-10-26, 결재선 단계
+    // 위임이 실제 결재에 연결되면서). 고칠 일이 생기면 **어느 쪽 이야기인지
+    // 먼저 가려라** — 가르는 것은 route_id 다:
+    //  · 결재선을 **타지 않는** 행(route_id 가 NULL) → `shipment_approval_delegations`
+    //    (「출하 대표」 권한을 통째로 맡기는 옛 표). 여기 적히는 사람은 그 순간
+    //    자격이 살아 있던 **대표**다(users.is_shipment_representative).
+    //  · 결재선을 **탄** 행(route_id 가 채워짐) → `approval_route_delegations`
+    //    (결재선 **단계**를 기간으로 맡기는 표, 마이그레이션 0119). 여기 적히는
+    //    사람은 그 단계의 결재권자, 곧 assigned_approver_user_id 와 같은 사람이다.
+    // 두 경로는 **동시에 일어날 수 없다** — 결재선을 타는 행은 대표·위임 판정을
+    // 아예 건너뛴다. 그래서 한 칸으로 충분하고, 어느 쪽이든 뜻은 같다. 갈림의
+    // 전문은 mutations/repair-case-approvals.ts 머리말에 있다.
+    //
+    // 🔴 **최고관리자 비상구로 누른 것은 위임이 아니다** — 그때는 NULL 이다.
+    // 섞어 적으면 「A 의 결재권을 받아 B 가 눌렀다」와 「막혀 있어 최고관리자가
+    // 풀었다」가 기록에서 구별되지 않는다. 판정은 한 곳에만 있다
+    // (auth/approval-assignment.ts 의 delegatedFromUserIdFor).
+    //
+    // 🔴 **최종 출하 승인에만 값이 있다.** 수리 검수 승인 행은 언제나 NULL 이고
+    // 아래 CHECK(delegation_only_for_final_shipment)이 그것을 강제한다 — 검수는
+    // 결재선을 탈 수 없어(route_only_for_final_shipment) 대신할 「단계」가 없고,
+    // 「출하 대표」라는 개념도 그쪽에는 없다.
     delegatedFromUserId: uuid("delegated_from_user_id").references(
       () => users.id,
       { onDelete: "restrict" }
