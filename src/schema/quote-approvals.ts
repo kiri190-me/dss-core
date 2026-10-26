@@ -143,6 +143,44 @@ export const quoteApprovals = pgTable(
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     decisionReason: text("decision_reason"),
     /**
+     * 「**누구 자리**를 대신 누른 것인가」 — 위임으로 대신 누른 경우 **원래 그
+     * 자리의 사람**(결재선 단계에 적혀 있던 사람)이 여기 남는다. 직접 누른
+     * 경우는 비어 있다.
+     *
+     * 🔴 **`decided_by_user_id` 와 둘 다 남아야 한다**(2026-10-20 사용자 결정).
+     * 대리인 이름으로 누른 사람 칸을 덮으면 「본인이 눌렀다」와 구분이 사라지고,
+     * 거꾸로 맡긴 사람 이름만 남기면 실제로 손을 댄 사람을 영영 못 찾는다.
+     * 「B 가 A 를 대신해 승인했다」는 두 칸을 **함께** 읽어야만 복원된다.
+     *
+     * 🔴 **NULL 이 정상값이고 뜻이 있다: 「직접 눌렀다」** — 이 칸이 생기기 전에
+     * 쌓인 결재 기록도 전부 NULL 로 남아 어제와 똑같이 읽힌다. 그래서 NOT NULL 도
+     * 기본값도 두지 않는다. assigned_approver_user_id · route_id 와 같은 규약이다.
+     *
+     * 여기 적힐 위임은 `approval_route_delegations`(결재선 **단계**를 기간으로
+     * 맡기는 표, 마이그레이션 0119)다. 🔴 `shipment_approval_delegations`(출하
+     * **대표** 권한을 통째로 맡기는 옛 표)가 아니다 — 견적서 결재에는 「대표」라는
+     * 개념 자체가 없고, 이 표의 결재자는 언제나 단계에 적힌 사람이다. 두 표의
+     * 차이는 approval-route-delegations.ts 머리말에 적혀 있다.
+     *
+     * 🔵 **2026-10-26 현재 이 칸을 채우는 코드는 아직 없다** — 마이그레이션 0120
+     * 은 칸만 만든다. `decideQuoteApproval`(mutations/quote-approvals.ts)이 위임
+     * 판정을 붙이면서 여기 값을 싣는 것이 다음 차례다. 그때까지 모든 줄이 NULL
+     * 이고, 그것이 「전부 직접 눌렀다」라는 참인 기록이다.
+     *
+     * 🔴 모양은 `repair_case_approvals.delegated_from_user_id` 와 **글자 그대로
+     * 같다**(uuid · nullable · users.id 참조 · ON DELETE RESTRICT). 같은 사실을
+     * 두 결재가 다른 모양으로 적기 시작하면 화면·조회·알림이 결재 종류마다
+     * 갈라진다. 다만 그 표의 `delegation_only_for_final_shipment` CHECK 에
+     * 해당하는 것은 여기 둘 수 없다 — 이 표에는 승인 종류 칸이 없다(route_id
+     * 주석의 사정과 같다).
+     *
+     * ON DELETE RESTRICT — 다른 사람 참조 칸들과 같다. 맡긴 사람이 지워지면서
+     * 「누구 자리였는지 알 수 없는 줄」이 남지 않게 한다.
+     */
+    delegatedFromUserId: uuid("delegated_from_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    /**
      * 🔴 **요청한 순간의 `quotes.version`.** 이것이 「승인 뒤 내용이 바뀌면 그 승인은
      * 무효」를 만드는 장치다 — 이 파일 머리말 참조. 요청할 때 반드시 정해지므로
      * NOT NULL 이고, 기본값은 두지 않는다(기본값이 있으면 version 을 싣지 않은
