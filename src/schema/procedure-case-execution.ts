@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -178,6 +179,46 @@ export const procedureCaseExecutionNodes = pgTable(
      * 갈래라 실행 행을 가진 참고 문서는 그 자체로 앞뒤가 안 맞는다.
      */
     extraTaskNodeType: procedureNodeTypeEnum("extra_task_node_type"),
+    /**
+     * 추가 작업을 **사람이 끌어다 놓은 자리**(2026-11-03, 조각 14). 사용자 결정 —
+     * 「노드를 추가하면 현재 선택한 노드를 기준으로 상하좌우 어디에 위치시킬지
+     * 선택할 수 있도록 해주고, 노드를 드래그로 옮길 수 있도록 해줘.」
+     *
+     * ──────────────────────────────────────────────────────────────────
+     * 🔵 이름을 **절차 노드 쪽과 똑같이** 맞춘다
+     * ──────────────────────────────────────────────────────────────────
+     * procedure_template_nodes.user_position_x / user_position_y 와 같은 이름,
+     * 같은 자료형(double precision), 같은 「비어 있을 수 있음」이다. 뜻도 같다 —
+     * **사람이 손으로 정한 자리**이고, 그림이 배치를 고를 때 언제나 이쪽이
+     * 이긴다(resolveBaselinePosition). 같은 뜻의 칸에 다른 이름을 붙이면 두 표를
+     * 한 그림으로 합쳐 읽는 쪽이 칸마다 짝을 다시 적어야 하고, 읽는 사람은 둘을
+     * 서로 다른 것으로 본다.
+     *
+     * 🔴 **절차 노드 쪽의 position_x/position_y 에 해당하는 칸은 안 만들었다.**
+     * 저쪽의 그 둘은 「엑셀에서 들여온 원래 자리」이고, 이 건에서 더한 작업에는
+     * 들여온 자리라는 것이 애초에 없다. 비어 있을 때 어디에 설 것인가는 조회가
+     * 그때그때 센다(placeAddedGraphNodes — 앞 칸 오른쪽, 형제는 아래로).
+     *
+     * ──────────────────────────────────────────────────────────────────
+     * 🔴 **비어 있는 것이 기본이고, 그것이 「저절로 센 자리」라는 뜻이다**
+     * ──────────────────────────────────────────────────────────────────
+     * NOT NULL 로 두지 않았다. 이 칸이 생기기 전에 등록된 추가 작업이 그대로
+     * 남아 있고(실측 2026-11-03 기준 개발 DB 의 실행 노드 250줄), 그 줄들은
+     * 비어 있는 채로 **지금과 똑같이** 그려져야 한다. 기본값을 박아 채우면
+     * 「사람이 정한 자리」와 「시스템이 센 자리」가 영영 안 갈린다 — 비어 있는
+     * 것이 곧 「아직 아무도 안 옮겼다」는 사실이다.
+     *
+     * 🔵 **템플릿에서 온 줄은 영원히 비어 있다.** 그 줄의 자리는 원본 노드가
+     * 들고 있고(procedure_template_nodes 의 같은 이름 칸), 이 건에서 그것을
+     * 덮어쓰면 **원본 절차의 배치를 이 건이 바꾸는** 셈이 된다. 쓰기 쪽
+     * (moveExecutionExtraTask)이 procedure_template_node_id 가 찬 줄을 거절한다.
+     *
+     * 🔴 **낙관적 잠금 토큰(version)을 안 올린다.** 좌표는 일의 상태가 아니라
+     * 보기 좋자고 정하는 자리라, 옮길 때마다 version 이 오르면 옆 사람의 탭이
+     * 다음 [완료]에서 CONFLICT 로 튕긴다 — 아무도 일을 안 바꿨는데.
+     */
+    userPositionX: doublePrecision("user_position_x"),
+    userPositionY: doublePrecision("user_position_y"),
     status: procedureCaseExecutionNodeStatusEnum("status").notNull().default("PENDING"),
     // DECISION nodes only — the edge the engineer chose when completing
     // this node. Must belong to the same template and originate from this
