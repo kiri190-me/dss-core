@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { procedureTemplates } from "./procedure-templates";
 
 /**
@@ -75,6 +76,35 @@ export const procedureTemplateNodes = pgTable(
     workerMayAddNextTask: boolean("worker_may_add_next_task")
       .notNull()
       .default(true),
+    /**
+     * 2026-11-04 — END 노드에서 **다른 절차로 이어가기**(A/S 줄기 B ④).
+     *
+     * 🔴 비어 있는 것이 기본이고, 비어 있으면 지금까지와 한 치도 다르지 않게
+     * 동작한다. 기존 END 행은 한 행도 안 바뀐다. 노드 종류 enum(위의 닫힌 9값)을
+     * 늘리지 않으려고 칸으로 푼 것이다 — 열 번째 값을 더하면 갈래 수가 박힌
+     * 코드·주석·시험 네 군데를 전부 따라 고쳐야 한다.
+     *
+     * 🔴 **담기는 값은 판 하나인데, 읽는 쪽은 계열로 푼다.** FK 가 걸려야 없는
+     * 절차를 가리키는 일을 DB 가 막아 주므로 id 를 담는다. 그러나 실행할 때는
+     * 이 id 를 그대로 열지 않고 그 행의 `code`(계열)를 읽어 **그 계열의 지금
+     * 게시본**을 연다 — 절차는 계속 개정되고, 판을 콕 집어 두면 그 판이
+     * [만료됨]으로 내려가는 날 이 절차를 가리키는 END 를 전부 손으로 다시
+     * 지정해야 하기 때문이다. 푸는 규칙은 A/S 의
+     * `src/lib/domain/procedure-next-procedure-link.ts` 한 곳에 있다.
+     *
+     * 🔴 END 가 **아닌** 노드에 값이 들어가면 안 된다. DB 는 그것을 막지 않는다 —
+     * CHECK 로 적으면 drizzle 의 sql 템플릿이 상수를 바인딩 자리로 구워 돌릴 수
+     * 없는 마이그레이션이 나온 전례가 있다. 막는 자리는 위 모듈과 쓰기 경로다.
+     *
+     * 🔴 `onDelete: "restrict"` 라서 **가리켜진 절차는 완전삭제가 거부된다.**
+     * 그래서 A/S 의 삭제 판정(countProcedureTemplateReferences)이 이 칸을
+     * **반드시 함께 세야** 한다 — 안 세면 휴지통에서 영영 안 사라지는 행이 생기고,
+     * 오류도 안 나서 아무도 신고하지 않는다.
+     */
+    nextProcedureTemplateId: uuid("next_procedure_template_id").references(
+      () => procedureTemplates.id,
+      { onDelete: "restrict" }
+    ),
     positionX: doublePrecision("position_x").notNull().default(0),
     positionY: doublePrecision("position_y").notNull().default(0),
     // Phase 4A editor — 사용자 배치 (user layout) override, entirely separate
@@ -106,5 +136,11 @@ export const procedureTemplateNodes = pgTable(
     index("procedure_template_nodes_template_id_idx").on(
       table.procedureTemplateId
     ),
+    // 🔴 역방향으로 센다 — "이 절차를 가리키는 END 가 있는가"를 삭제 판정이
+    //    매번 물어야 하는데, 그 조회는 이 칸을 **조건**으로 쓴다(위 칸 주석).
+    //    대부분의 행이 null 이라 부분 인덱스로 둔다.
+    index("procedure_template_nodes_next_template_idx")
+      .on(table.nextProcedureTemplateId)
+      .where(sql`${table.nextProcedureTemplateId} IS NOT NULL`),
   ]
 );
