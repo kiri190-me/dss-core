@@ -26,7 +26,8 @@ import { users } from "./users";
  * 이름에 남은 `shipment` 는 **처음 쓰임새의 흔적일 뿐이다**(2026-09-10). 지금 이
  * 표는 출하 전용이 아니고, 어느 절차인지는 `scope` 칸 하나가 정한다 —
  * 'FINAL_SHIPMENT'(최종 출하 승인) · 'PART_ISSUE'(부품 불출 승인) ·
- * 'QUOTE'(견적서 승인). 표·코드 이름을
+ * 'QUOTE'(견적서 승인) · 'DOMESTIC_ORDER_FINAL_SHIPMENT'(기타건 최종 출하 승인).
+ * 표·코드 이름을
  * 바꾸지 않은 것은 의도다: 표 이름 바꾸기는 db:preflight 가 보지 못하는 종류의
  * 위험한 변경이고(자료가 사라지지는 않지만 적용 도중 끊기면 앱이 통째로 멈춘다),
  * 지금 얻을 것보다 잃을 것이 크다. **다음 사람은 이름이 아니라 scope 를 보고
@@ -89,6 +90,16 @@ import { users } from "./users";
  * 것은 「누가 언제 승인했나」뿐이다. 출하·불출과 갈라 둔 것은 **결재하는 사람이
  * 다를 수 있기 때문**이다.
  *
+ * 'DOMESTIC_ORDER_FINAL_SHIPMENT' 는 **기타건(내자 정리의 한 줄) 최종 출하 승인**
+ * 이다(2026-11-06 사용자 결정 — 「승인절차는 [기타건 최종 출하승인]으로 절차를 따로
+ * 만들자」). 결재 기록은 수리 건과 **같은 표**에 쌓이고(repair_case_approvals 의
+ * domestic_order_id 칸), 갈래를 따로 둔 까닭은 **결재하는 사람이 다를 수 있기
+ * 때문**이다 — 'QUOTE' 를 출하와 갈라 둔 것과 같은 이유다.
+ *
+ * 🔴 이 용도는 **판이 없으면 요청 자체가 거절된다**('QUOTE' · 'PART_ISSUE' 와 같다).
+ * 'FINAL_SHIPMENT' 만이 판 없이도 돌아가는데, 그쪽에는 「출하 대표」라는 대신할
+ * 결재자가 있기 때문이다. 기타건에는 그 자리가 없다.
+ *
  * 값 순서는 **실제 DB 의 순서와 같아야 한다** — ALTER TYPE ... ADD VALUE 는
  * 언제나 뒤에 붙으므로 새 용도는 **맨 끝에** 적는다. 어긋나면 다음 db:generate
  * 가 있지도 않은 차이를 감지한다(domain/shipment-approval-route.test.ts 가
@@ -98,6 +109,7 @@ export const shipmentApprovalRouteScopeEnum = pgEnum("shipment_approval_route_sc
   "FINAL_SHIPMENT",
   "PART_ISSUE",
   "QUOTE",
+  "DOMESTIC_ORDER_FINAL_SHIPMENT",
 ]);
 
 /**

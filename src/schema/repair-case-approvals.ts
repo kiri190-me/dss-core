@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { domesticOrders } from "./domestic-orders";
 import { repairCases } from "./repair-cases";
 import { shipmentApprovalRoutes } from "./shipment-approval-routes";
 import { users } from "./users";
@@ -18,10 +19,29 @@ import { users } from "./users";
  * Two-value set matching the local-demo domain layer's ApprovalType exactly
  * (src/lib/domain/local/approval/approval-types.ts APPROVAL_TYPE_CODES) —
  * no new approval types invented here.
+ *
+ * ── 🔴 2026-11-06: **셋째 값이 붙었다. 접수 건의 것이 아니다.** ───────────
+ * 'DOMESTIC_ORDER_FINAL_SHIPMENT' 는 **기타건**(내자 정리의 한 줄, domestic_orders)
+ * 의 최종 출하 승인이다. 표 이름이 `repair_case_…` 인데 접수 건이 아닌 행이 들어오는
+ * 것은 사용자 승인을 받은 설계다(2026-11-06, 「㉮ 그 표에 칸을 더한다」) — 결재선 ·
+ * 지정 · 위임 · 사슬 잇기가 접수 건 출하 승인과 **글자 그대로 같은 규칙**이라 표를
+ * 따로 두면 그 규칙이 두 벌이 된다.
+ *
+ * 🔴 **어느 쪽 행인지는 approval_type 으로 가린다** — repair_case_id 가 NULL 인지로
+ * 가리면 안 된다. 그 칸은 접수 건을 영구 삭제하면 NULL 이 되므로(ON DELETE SET NULL)
+ * 「접수 건 결재인데 NULL」인 행이 실제로 있다(2026-11-06 개발 DB 실측 76행 중 18행).
+ * 아래 두 CHECK 가 타입과 주체 칸을 묶어 둔다.
+ *
+ * 🔴 **위 둘을 보는 조회는 한 줄도 바뀌지 않았다.** 그 조회들은 전부
+ * `repair_case_id = ?` 로 좁히거나 repair_cases 와 INNER JOIN 하는데, 기타건 행은
+ * repair_case_id 가 **언제나 NULL** 이라(아래 CHECK) 어느 쪽으로도 걸리지 않는다.
+ * 값을 따로 둔 가장 큰 까닭이 그것이다 — 'FINAL_SHIPMENT' 를 그대로 쓰면 그 조회들이
+ * 조용히 기타건 행을 집어 든다.
  */
 export const approvalTypeEnum = pgEnum("repair_case_approval_type", [
   "REPAIR_INSPECTION",
   "FINAL_SHIPMENT",
+  "DOMESTIC_ORDER_FINAL_SHIPMENT",
 ]);
 
 /**
@@ -79,6 +99,27 @@ export const repairCaseApprovals = pgTable(
     // future repair_cases hard-delete ever nulls it. Same proven pattern as
     // repair_case_flowchart_edit_history.flowchart_id (migration 0026).
     repairCaseId: uuid("repair_case_id").references(() => repairCases.id, {
+      onDelete: "set null",
+    }),
+    // 「기타건」(내자 정리의 한 줄)의 결재일 때 그 줄 — 2026-11-06.
+    //
+    // 🔴 **위 repair_case_id 와 짝을 이루는 「주체」 칸이고, 둘은 함께 차지 않는다.**
+    // 어느 쪽 결재인지는 approval_type 이 정하고(위 enum 주석), 아래 CHECK 둘이 타입과
+    // 이 두 칸을 묶는다:
+    //  · domestic_order_only_for_domestic_type — 이 칸은 기타건 결재에만 찬다.
+    //  · domestic_type_has_no_repair_case      — 기타건 결재에는 접수 건이 없다.
+    // 둘을 합치면 「둘 다 차 있는 행」은 존재할 수 없다.
+    //
+    // 🔴 **XOR(「둘 중 정확히 하나」)로 적지 않는다.** repair_case_id 는 접수 건을 영구
+    // 삭제하면 NULL 이 되므로(바로 위 ON DELETE SET NULL) **둘 다 NULL 인 행이 이미
+    // 있다** — 2026-11-06 개발 DB 실측으로 76행 중 18행이 그랬다. XOR 를 걸면 그 18행
+    // 때문에 마이그레이션 자체가 적용되지 않고, 설령 지금 0건이라도 접수 건 영구 삭제
+    // 경로(mutations/repair-cases-permanent-delete.ts)가 그날부터 막힌다.
+    //
+    // ON DELETE SET NULL — repair_case_id 와 같은 까닭이다. 이 표는 고쳐 쓰지 않는
+    // 결재 이력이고, 기타건 줄이 영구 삭제돼도 「누가 언제 승인했나」는 남아야 한다
+    // (domestic_orders 쪽도 접수 건을 그렇게 가리키고 있다).
+    domesticOrderId: uuid("domestic_order_id").references(() => domesticOrders.id, {
       onDelete: "set null",
     }),
     approvalType: approvalTypeEnum("approval_type").notNull(),
@@ -178,6 +219,22 @@ export const repairCaseApprovals = pgTable(
       () => users.id,
       { onDelete: "restrict" }
     ),
+    /**
+     * 요청하던 순간 **그 건의 낙관적 잠금 번호**. 그 뒤에 건이 바뀌면 이 승인은
+     * 무효가 된다(resolveApprovalState 가 지금 번호와 견준다).
+     *
+     * 🔴 **이름은 `repair_case_…` 인데 기타건 행에는 `domestic_orders.version` 이
+     * 들어간다**(2026-11-06). 칸 이름을 바꾸지 않은 것은 의도다 — 이 칸을 읽는
+     * 모듈이 여덟이고, NOT NULL 칸 이름 바꾸기는 db:preflight 가 보지 못하는 종류의
+     * 변경이라(표 이름 바꾸기를 피한 shipment_approval_routes 와 같은 판단) 지금 얻을
+     * 것보다 잃을 것이 크다. **다음 사람은 이름이 아니라 approval_type 을 보고
+     * 판단할 것.**
+     *
+     * 🔵 두 표 모두 version 은 **고칠 때마다 +1 되는 진짜 잠금 토큰**이다
+     * (mutations/domestic-orders.ts 의 updateDomesticOrder 가 repair_cases 와 같은
+     * 방식으로 올린다). 그래서 뜻이 그대로 선다: 「요청 뒤에 그 줄이 바뀌면 다시
+     * 받아야 한다」.
+     */
     repairCaseVersionAtRequest: integer(
       "repair_case_version_at_request"
     ).notNull(),
@@ -196,7 +253,23 @@ export const repairCaseApprovals = pgTable(
     uniqueIndex("repair_case_approvals_one_active_request")
       .on(table.repairCaseId, table.approvalType)
       .where(sql`status = 'REQUESTED'`),
+    // 🔴 기타건 쪽의 **같은 보증**이다 — 한 내자 줄에 열려 있는 요청은 하나다.
+    //
+    // 색인을 따로 두는 것 말고 길이 없다: 위 색인의 첫 칸이 repair_case_id 인데
+    // 기타건 행은 그 칸이 **언제나 NULL** 이고, Postgres 의 유니크 색인은 NULL 끼리
+    // 겹치는 것으로 보지 않는다(그래서 위 색인은 기타건 행을 하나도 막지 않는다 —
+    // 뒤집어 말하면 **기타건 행이 생겨도 수리 건 쪽 보증은 한 톨도 바뀌지 않는다**).
+    //
+    // approval_type 을 함께 넣는 것은 수리 건 쪽과 모양을 맞추기 위해서다. 지금은
+    // 기타건 결재 종류가 하나뿐이라 없어도 같게 동작하지만, 종류가 늘면 그때
+    // 「종류별로 하나」가 저절로 따라온다.
+    uniqueIndex("repair_case_approvals_one_active_domestic_request")
+      .on(table.domesticOrderId, table.approvalType)
+      .where(sql`status = 'REQUESTED'`),
     index("repair_case_approvals_repair_case_id_idx").on(table.repairCaseId),
+    // 기타건 상세의 [승인] 탭이 이 길로 그 줄의 결재 이력을 읽는다
+    // (repair_case_id_idx 와 같은 자리).
+    index("repair_case_approvals_domestic_order_id_idx").on(table.domesticOrderId),
     index("repair_case_approvals_requested_by_user_id_idx").on(
       table.requestedByUserId
     ),
@@ -214,9 +287,21 @@ export const repairCaseApprovals = pgTable(
         (status = 'REJECTED' AND decided_by_user_id IS NOT NULL AND decided_at IS NOT NULL AND decision_reason IS NOT NULL)
       `
     ),
+    // 🔴 **이름 그대로 「최종 출하 승인에만」이다** — 2026-11-06 에 글자가 늘어난 것은
+    // 뜻이 넓어져서가 아니라, **최종 출하 승인이 둘이 됐기 때문**이다(접수 건의 것과
+    // 기타건의 것). 수리 검수 승인은 여전히 이 칸을 쓸 수 없다. 그래서 이름을 바꾸지
+    // 않았다 — 이 이름은 코드·주석 여섯 곳에서 이 규칙을 가리키고 있다.
+    //
+    // 🔴 **`::text` 로 견주는 까닭 — 이것이 없으면 마이그레이션이 적용되지 않는다.**
+    // drizzle 의 migrate 는 **밀린 마이그레이션 전부를 트랜잭션 하나**에 넣는다.
+    // 그 안에서 `ALTER TYPE … ADD VALUE` 로 갓 더한 값을 enum 리터럴로 쓰면 Postgres 가
+    // 거절한다(`unsafe use of new value "…" of enum type`). 파일을 둘로 쪼개도 소용이
+    // 없다 — 트랜잭션이 하나다. 2026-11-06 에 실제로 그 오류로 멈췄고, 운영에서도
+    // 똑같이 멈췄을 자리다(배포는 같은 명령을 쓴다).
+    // 🔵 `enum → text` 변환은 immutable 이라 CHECK 에 쓸 수 있다.
     check(
       "repair_case_approvals_delegation_only_for_final_shipment",
-      sql`delegated_from_user_id IS NULL OR approval_type = 'FINAL_SHIPMENT'`
+      sql`delegated_from_user_id IS NULL OR approval_type::text IN ('FINAL_SHIPMENT', 'DOMESTIC_ORDER_FINAL_SHIPMENT')`
     ),
     // 결재선 두 칸은 한 쌍이다. 하나만 채워진 행은 「어느 판인지는 아는데 몇
     // 번째인지 모른다」(또는 그 반대)라서 다음 단계를 이을 수도, 지난 단계를
@@ -226,10 +311,33 @@ export const repairCaseApprovals = pgTable(
       sql`(route_id IS NULL AND route_step_order IS NULL) OR (route_id IS NOT NULL AND route_step_order IS NOT NULL)`
     ),
     // 결재선은 최종 출하 승인에만 있다 — 검수 승인은 역할 자격으로 처리한다.
-    // delegation_only_for_final_shipment 와 같은 모양의 방어선이다.
+    // delegation_only_for_final_shipment 와 같은 모양의 방어선이고, 2026-11-06 에
+    // 글자가 늘어난 까닭도 같다(최종 출하 승인이 둘이 됐다).
+    //
+    // 🔵 기타건 쪽은 더 좁다 — 결재선이 **유일한** 길이라 route_id 가 NULL 인 행은
+    // 정상 경로로는 생기지 않는다. 그 좁힘은 DB 가 아니라 저장 경로가 지킨다
+    // (mutations/domestic-order-approvals.ts 는 판이 없으면 요청을 거절한다) —
+    // 여기서 NOT NULL 로 못 박으면 수리 건 쪽 행까지 함께 걸린다.
+    // `::text` 인 까닭은 바로 위 CHECK 주석에 있다(갓 더한 enum 값은 같은 트랜잭션에서
+    // 리터럴로 쓸 수 없다).
     check(
       "repair_case_approvals_route_only_for_final_shipment",
-      sql`route_id IS NULL OR approval_type = 'FINAL_SHIPMENT'`
+      sql`route_id IS NULL OR approval_type::text IN ('FINAL_SHIPMENT', 'DOMESTIC_ORDER_FINAL_SHIPMENT')`
+    ),
+    // ── 🔴 「주체」 칸 둘과 승인 종류를 묶는 CHECK 둘 (2026-11-06) ─────────
+    // 합치면 「둘 다 차 있는 행은 없다」가 따라 나온다. 한 줄로 합치지 않고 둘로 둔
+    // 것은 어긋났을 때 **어느 쪽이 틀렸는지 이름으로 알 수 있게** 하기 위해서다.
+    //
+    // 🔴 **XOR 가 아니다** — 「둘 다 NULL」은 정상이다. 까닭은 domestic_order_id 칸
+    // 주석에 있다(영구 삭제된 접수 건의 결재 이력이 실제로 그 모양이다).
+    // `::text` 인 까닭은 위 delegation CHECK 주석에 있다.
+    check(
+      "repair_case_approvals_domestic_order_only_for_domestic_type",
+      sql`domestic_order_id IS NULL OR approval_type::text = 'DOMESTIC_ORDER_FINAL_SHIPMENT'`
+    ),
+    check(
+      "repair_case_approvals_domestic_type_has_no_repair_case",
+      sql`approval_type::text <> 'DOMESTIC_ORDER_FINAL_SHIPMENT' OR repair_case_id IS NULL`
     ),
   ]
 );
