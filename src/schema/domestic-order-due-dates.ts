@@ -1,5 +1,7 @@
-import { date, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, date, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { domesticOrders } from "./domestic-orders";
+import { users } from "./users";
 
 /**
  * ============================================================================
@@ -72,6 +74,21 @@ import { domesticOrders } from "./domestic-orders";
  * 수명까지 바꾸면 무엇 때문에 달라졌는지 나중에 가릴 수 없다.
  * 🔵 화면에서 지우는 일은 소프트 삭제라 이 표를 건드리지 않는다(위 머리말).
  *
+ * ── 🔴 **회차마다 [완료 처리]가 있다** (2026-11-08) ─────────────────────
+ * 사용자 결정 7·8: 「납품일이 여러개라면 **각각에 [완료처리]버튼**을 만들어줘」·
+ * 「**마지막 분할분이 찍히면 자동으로**」 내자 줄이 완료된다. 그래서 행 하나가
+ * 「언제까지 달라고 했고 · 언제 누가 보냈고 · **그 회차를 끝냈는가**」 한 벌이 된다.
+ *
+ * 🔴 **이 두 칸은 `replaceDueDates` 가 **다시 적어 주는** 값이다.** 이 표의 저장은
+ * 여전히 「통째로 지우고 받은 목록으로 다시 넣기」인데(파일 머리말), 완료 표시는
+ * **폼이 보내는 값이 아니다** — 보내게 두면 줄 수정 폼의 payload 하나로 승인 없이
+ * 완료를 찍을 수 있다. 그래서 저장 통로가 지우기 **전에** 읽어 두었다가 같은 차례
+ * (`display_order`)의 새 행에 **서버가 직접** 되얹는다
+ * (mutations/domestic-orders.ts 의 replaceDueDates — 「완료 표시를 되얹는다」).
+ * 🔵 차례가 줄어드는 저장은 울타리가 막는다(domain/domestic-order-due-date-rows.ts
+ * 의 결정 13 짝 — 「완료 처리된 회차가 있으면 줄을 지울 수 없다」). 그래서 되얹기가
+ * 엉뚱한 회차로 밀릴 자리가 없다.
+ *
  * ── PII ────────────────────────────────────────────────────────────────
  * note 는 사람이 자유롭게 적는 칸이라("1차분", "김유진 과장 확인분") 담당자
  * 이름이 섞일 수 있다. 🔴 **`delivered_by` 는 그보다 확실하다 — 사람 이름 칸이다**
@@ -118,6 +135,29 @@ export const domesticOrderDueDates = pgTable(
      * 단서가 거짓이 된다. 적는 자리는 사람이 여는 편집칸뿐이다.
      */
     deliveredBy: text("delivered_by"),
+    /**
+     * 🔴 **이 회차를 [완료 처리]한 시각**(2026-11-08). NULL 이면 아직 안 끝났다.
+     *
+     * 부모 줄의 `domestic_orders.completed_at` 과 **뜻이 같고 단위만 다르다** — 저쪽은
+     * 「이 발주 줄을 끝냈다」, 이쪽은 「이 회차를 끝냈다」. 둘은 한 방향으로 묶인다:
+     * **모든 회차가 끝나면 부모 줄이 자동으로 완료된다**(사용자 결정 8).
+     *
+     * 🔴 **이 칸이 차려면 그 회차의 [기타건 최종 출하 승인]이 유효해야 한다**(사용자
+     * 결정 13). 판정도 울타리도 저장 통로가 트랜잭션 안에서 쥔다
+     * (mutations/domestic-orders.ts) — 이 표에는 그것을 표현할 자리가 없다(승인 행은
+     * `repair_case_approvals` 에 있고, 그 행이 이 행을 가리키는 방식은 **id 가 아니라
+     * 회차 번호**다. 까닭은 그 표의 `due_date_row_order` 주석에 있다).
+     */
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    /**
+     * 그 회차를 완료 처리한 사람. 🔴 **부모 줄의 `completed_by` 와 같은 모양**이다 —
+     * users FK · ON DELETE RESTRICT(기록이 조용히 뭉개지지 않게).
+     *
+     * 🔵 `delivered_by`(시트 그대로의 글자)와 **다른 종류의 칸**이다. 저쪽은 「고객에게
+     * 보낸 사람」이라 우리 계정이 아닐 수 있고, 이쪽은 「이 시스템에서 단추를 누른
+     * 사람」이라 언제나 계정이다.
+     */
+    completedBy: uuid("completed_by").references(() => users.id, { onDelete: "restrict" }),
     /** 사람이 정한 차례. 파일 헤더의 'display_order 는 사람이 정한 차례다'. */
     displayOrder: integer("display_order"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -128,5 +168,13 @@ export const domesticOrderDueDates = pgTable(
     // 않으려고 domestic_order_id IN (...) 로 한 번에 읽는다). 부분 인덱스가
     // 아닌 것은 이 표에 is_deleted 가 없기 때문이다.
     index("domestic_order_due_dates_order_id_idx").on(table.domesticOrderId),
+    // 🔴 완료 두 칸은 **언제나 함께 움직인다** — 부모 표의 completed_at/completed_by 가
+    // 지키는 규칙 그대로다(mutations/domestic-orders.ts 의 '두 칸은 언제나 함께').
+    // 한쪽만 남으면 「완료 시각은 없는데 완료한 사람은 있는」 행이 생기고, 그때 그
+    // 회차가 완료인지 아닌지 답할 방법이 없다 — 판정은 completed_at 하나로만 한다.
+    check(
+      "domestic_order_due_dates_completed_columns_together",
+      sql`(completed_at IS NULL AND completed_by IS NULL) OR (completed_at IS NOT NULL AND completed_by IS NOT NULL)`
+    ),
   ]
 );

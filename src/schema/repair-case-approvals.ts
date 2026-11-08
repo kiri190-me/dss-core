@@ -122,6 +122,42 @@ export const repairCaseApprovals = pgTable(
     domesticOrderId: uuid("domestic_order_id").references(() => domesticOrders.id, {
       onDelete: "set null",
     }),
+    // ── 🔴 「그 기타건의 **몇 번째 납기요청일 줄**에 대한 승인인가」 (2026-11-08) ──
+    //
+    // 사용자 결정 12: 「납기 요청일이 복수로 있다면 출하승인요청을 할 때, **드롭다운으로
+    // 어느 납기 요청일에 관한 출하승인 요청인지 선택**하도록」. 그래서 승인의 단위가
+    // 「기타건 한 줄」에서 「그 줄의 **회차 하나**」로 내려왔다.
+    //
+    // 🔴 **FK 가 아니라 번호다. 이것이 이 설계에서 가장 설명이 필요한 자리다.**
+    // `domestic_order_due_dates` 를 가리키는 uuid FK 가 자연스러워 보이지만 쓸 수 없다:
+    //  · 그 표의 저장은 **통째로 지우고 다시 넣기**다(mutations/domestic-orders.ts 의
+    //    replaceDueDates). 줄을 한 번 저장할 때마다 행 `id` 가 전부 새로 생긴다.
+    //  · 그러면 FK 는 둘 중 하나가 된다 — CASCADE 면 **저장 한 번에 결재 이력이
+    //    통째로 사라지고**(이 표는 고쳐 쓰지 않는 이력이다 — 파일 머리말), SET NULL 이면
+    //    **저장 한 번에 모든 승인이 어느 회차의 것인지 잃는다.** 둘 다 못 쓴다.
+    //  · 「행을 유지하며 갱신」으로 바꿔도 **식별자가 생기지는 않는다.** 저장 payload 에
+    //    행 열쇠가 없기 때문이다 — 「이 payload 는 **차례가 곧 열쇠**인 목록」이라고
+    //    domain/domestic-order-due-date-rows.ts 가 이미 적어 두었다. 그 경우 id 는
+    //    「N 번째 행」을 한 겹 돌려 부르는 이름일 뿐이고, 대신 위 CASCADE 문제를 떠안는다.
+    //
+    // 🔴 **사람이 쓰는 식별자도 번호다.** 화면이 회차를 부르는 말이 「1차 · 납기
+    // 2026-01-20 (1차분)」이고(domain/domestic-order-due-date-label.ts), 그 번호가 곧
+    // `domestic_order_due_dates.display_order` 다(저장이 언제나 index + 1 로 적는다).
+    // 드롭다운에서 고르는 것도, 완료 단추가 달리는 것도 그 번호다.
+    //
+    // 🔴 **번호가 엉뚱한 회차를 가리키게 되는 길은 막혀 있다.** 회차 목록을 바꿀 수
+    // 있는 길은 `updateDomesticOrder` 하나뿐이고 그 저장은 언제나
+    // `domestic_orders.version` 을 +1 한다 — 그 순간 이 줄의 모든 승인이
+    // `repair_case_version_at_request` 대조에서 STALE 이 되어 아무 문도 열지 못한다
+    // (resolveApprovalState). 그래서 「2차분의 승인이 다른 날짜에 붙는」 상태로 완료가
+    // 통과할 수는 없다.
+    //
+    // 🔴 **기타건 행에는 언제나 값이 있다**(아래 CHECK 둘). 회차가 0개인 기타건도
+    // 1번 하나를 단위로 본다 — 개발 DB 실측(2026-11-08)으로 살아 있는 기타건 15건 중
+    // 11건이 납기요청일 0행이라, 「0행이면 승인할 단위가 없다」로 두면 그 11건이 영영
+    // 완료되지 않는다. 그 규칙이 적힌 곳은 domain/domestic-order-approval-rules.ts 의
+    // domesticOrderApprovalUnitCount 하나다.
+    dueDateRowOrder: integer("due_date_row_order"),
     approvalType: approvalTypeEnum("approval_type").notNull(),
     status: approvalStatusEnum("status").notNull().default("REQUESTED"),
     requestedByUserId: uuid("requested_by_user_id")
@@ -253,18 +289,24 @@ export const repairCaseApprovals = pgTable(
     uniqueIndex("repair_case_approvals_one_active_request")
       .on(table.repairCaseId, table.approvalType)
       .where(sql`status = 'REQUESTED'`),
-    // 🔴 기타건 쪽의 **같은 보증**이다 — 한 내자 줄에 열려 있는 요청은 하나다.
+    // 🔴 기타건 쪽의 **같은 보증**이다 — 열려 있는 요청은 **회차마다 하나**다.
     //
     // 색인을 따로 두는 것 말고 길이 없다: 위 색인의 첫 칸이 repair_case_id 인데
     // 기타건 행은 그 칸이 **언제나 NULL** 이고, Postgres 의 유니크 색인은 NULL 끼리
     // 겹치는 것으로 보지 않는다(그래서 위 색인은 기타건 행을 하나도 막지 않는다 —
     // 뒤집어 말하면 **기타건 행이 생겨도 수리 건 쪽 보증은 한 톨도 바뀌지 않는다**).
     //
+    // 🔴 **2026-11-08 에 칸이 하나 늘었다 — `due_date_row_order`.** 늘기 전에는
+    // 「한 기타건에 열린 요청 하나」였고, 그것이 **회차마다 승인을 올리는 길을 DB 에서
+    // 막고 있었다**(1차분이 열려 있으면 2차분 요청이 23505 로 거절됐다). 뜻은 그대로
+    // 「한 단위에 열린 요청 하나」이고, **단위가 줄에서 회차로 내려왔을 뿐**이다.
+    // 🔵 회차가 하나뿐인 기타건에서는 늘기 전과 글자 그대로 같게 동작한다.
+    //
     // approval_type 을 함께 넣는 것은 수리 건 쪽과 모양을 맞추기 위해서다. 지금은
     // 기타건 결재 종류가 하나뿐이라 없어도 같게 동작하지만, 종류가 늘면 그때
     // 「종류별로 하나」가 저절로 따라온다.
     uniqueIndex("repair_case_approvals_one_active_domestic_request")
-      .on(table.domesticOrderId, table.approvalType)
+      .on(table.domesticOrderId, table.approvalType, table.dueDateRowOrder)
       .where(sql`status = 'REQUESTED'`),
     index("repair_case_approvals_repair_case_id_idx").on(table.repairCaseId),
     // 기타건 상세의 [승인] 탭이 이 길로 그 줄의 결재 이력을 읽는다
@@ -338,6 +380,29 @@ export const repairCaseApprovals = pgTable(
     check(
       "repair_case_approvals_domestic_type_has_no_repair_case",
       sql`approval_type::text <> 'DOMESTIC_ORDER_FINAL_SHIPMENT' OR repair_case_id IS NULL`
+    ),
+    // ── 🔴 회차 번호와 승인 종류를 묶는 CHECK 둘 (2026-11-08) ────────────
+    // 바로 위 「주체 칸」 둘과 같은 모양이지만, **방향이 둘 다 막혀 있다**는 점이
+    // 다르다: 기타건이 아닌 행에는 회차가 **없어야 하고**, 기타건 행에는 회차가
+    // **있어야 한다.** 주체 칸 쪽이 한 방향만 막는 것은 「둘 다 NULL」이 정상이기
+    // 때문인데(영구 삭제된 접수 건의 이력), 회차 번호에는 그런 사정이 없다 —
+    // 기타건 행은 언제나 어느 회차의 것인지 말할 수 있어야 하고, 말할 수 없으면
+    // 완료 관문이 어느 회차를 열어야 할지 모른다.
+    //
+    // 🔴 **이미 쌓여 있던 기타건 행은 마이그레이션 0126 이 1차로 메운다.** 그때까지
+    // 승인의 단위가 「줄 전체」였고, 개발 DB 실측(2026-11-08)에서 그 3행이 붙어 있던
+    // 줄의 납기요청일은 각각 1행·0행·0행이었다 — 셋 다 회차가 하나뿐이라 「줄 전체」와
+    // 「1차」가 가리키는 것이 같다. 운영도 같은 모양일 것으로 보고 같은 값을 넣는다.
+    //
+    // `::text` 인 까닭은 위 delegation CHECK 주석에 있다(갓 더한 enum 값은 같은
+    // 트랜잭션에서 리터럴로 쓸 수 없다. 0124 는 같은 판에서 값을 더했고, 그때 멈췄다).
+    check(
+      "repair_case_approvals_due_date_row_only_for_domestic_type",
+      sql`due_date_row_order IS NULL OR approval_type::text = 'DOMESTIC_ORDER_FINAL_SHIPMENT'`
+    ),
+    check(
+      "repair_case_approvals_domestic_type_has_due_date_row",
+      sql`approval_type::text <> 'DOMESTIC_ORDER_FINAL_SHIPMENT' OR (due_date_row_order IS NOT NULL AND due_date_row_order >= 1)`
     ),
   ]
 );
