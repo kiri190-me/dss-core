@@ -58,3 +58,4 @@ export * from "./product-model-kind-share-docs";
 export * from "./product-model-share-docs";
 export * from "./approval-route-delegations";
 export * from "./badge-visibility-settings";
+export * from "./portal-approval-delegations";
