@@ -319,6 +319,36 @@ export const repairCaseApprovals = pgTable(
     index("repair_case_approvals_assigned_approver_user_id_idx").on(
       table.assignedApproverUserId
     ),
+    // ── 🔴 「이 사람이 이 기간에 한/대신한 결재」가 타는 길 둘 (2026-11-17) ──
+    //
+    // 통합 승인함의 **결재 내역** 조회가 `(decided_by_user_id = 나 OR
+    // delegated_from_user_id = 나) AND decided_at ∈ [시작, 끝)` 로 묻는다
+    // (queries/approval-history.ts). 세 칸 어디에도 색인이 없던 자리다.
+    //
+    // 🔴 **한 색인으로 못 탄다 — OR 의 두 칸이 서로 다른 칸이라서다.** 복합 색인은
+    // 맨 앞 칸으로 찾아 들어가므로 (decided_by, delegated_from, decided_at) 한 벌을
+    // 두어도 `delegated_from = 나` 쪽은 맨 앞 칸을 모르는 질의가 되어 전수 조회로
+    // 떨어진다. 그래서 **사람 칸마다 하나씩** 둔다 — Postgres 는 둘을 비트맵으로
+    // 합쳐(BitmapOr) 한 번에 쓴다.
+    //
+    // 🔵 칸 차례가 「사람 → 시각」인 것은 같다(=) 로 좁히는 칸이 앞, 범위로 좁히는
+    // 칸이 뒤다. 뒤집으면 시각 범위 안의 **모든 사람** 결재를 훑고 나서 사람을
+    // 거른다.
+    //
+    // 🔵 **부분 색인(`WHERE … IS NOT NULL`)으로 적지 않았다.** delegated_from 은
+    // 거의 다 NULL 이라 줄여 둘 만해 보이지만(개발 DB 100행 중 2행), 그러면 색인이
+    // 쓰이는지가 「`= $1` 이 `IS NOT NULL` 을 함의한다」는 계획기의 증명에 매달리게
+    // 된다. 증명이 안 되는 날 색인은 **조용히 안 쓰이고** 결과는 멀쩡하다 — 이
+    // 표에서 가장 늦게 발견되는 종류의 손해다. 바로 위 지정 결재자 색인도 같은
+    // 모양(대부분 NULL)인데 통짜다.
+    index("repair_case_approvals_decided_by_user_id_decided_at_idx").on(
+      table.decidedByUserId,
+      table.decidedAt
+    ),
+    index("repair_case_approvals_delegated_from_user_id_decided_at_idx").on(
+      table.delegatedFromUserId,
+      table.decidedAt
+    ),
     check(
       "repair_case_approvals_decision_metadata",
       sql`

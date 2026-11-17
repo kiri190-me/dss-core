@@ -220,6 +220,21 @@ export const quoteApprovals = pgTable(
     index("quote_approvals_requested_by_user_id_idx").on(table.requestedByUserId),
     // 알림 종·배지가 「내게 지정된 결재」를 찾는 길.
     index("quote_approvals_assigned_approver_user_id_idx").on(table.assignedApproverUserId),
+    // ── 🔴 「이 사람이 이 기간에 한/대신한 결재」가 타는 길 둘 (2026-11-17) ──
+    // 통합 승인함의 **결재 내역** 조회가 `(decided_by_user_id = 나 OR
+    // delegated_from_user_id = 나) AND decided_at ∈ [시작, 끝)` 로 묻는다
+    // (queries/approval-history.ts). 🔴 **색인이 둘인 까닭**(한 복합 색인으로는 OR 의
+    // 두 칸을 함께 못 탄다)과 **부분 색인으로 적지 않은 까닭**은
+    // repair_case_approvals 의 같은 자리에 적어 두었다 — 두 표가 **같은 모양**이어야
+    // 결재 내역이 결재 종류마다 다른 속도를 갖지 않는다.
+    index("quote_approvals_decided_by_user_id_decided_at_idx").on(
+      table.decidedByUserId,
+      table.decidedAt
+    ),
+    index("quote_approvals_delegated_from_user_id_decided_at_idx").on(
+      table.delegatedFromUserId,
+      table.decidedAt
+    ),
     // 결정은 딱 한 번, 그리고 상태와 결정 칸이 언제나 아귀가 맞는다.
     // 반려에만 사유를 강제하는 것은 의도다 — 승인은 말이 없어도 뜻이 분명하지만,
     // 반려는 무엇을 고쳐야 하는지 적히지 않으면 받은 사람이 할 수 있는 일이 없다.
