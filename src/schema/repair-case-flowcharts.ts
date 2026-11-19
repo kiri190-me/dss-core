@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -38,6 +39,16 @@ export const repairCaseFlowcharts = pgTable(
       .references(() => repairCases.id, { onDelete: "restrict" }),
     title: text("title").notNull(),
     description: text("description"),
+    // 고장 개소 태그(2026-11-19) — 「#우내, #우외」처럼 적어 두는 **값**이다.
+    // 미리 정해 둔 목록이 아니라 적는 대로 생기므로 enum 도 마스터 표도 두지
+    // 않는다. 같은 파일 묶음의 repair_case_flowchart_edges.route_points 와 같은
+    // jsonb 쓰임 — 배열 하나가 통째로 한 칸의 값이고, 쪼개 조회할 일이 없다.
+    //
+    // 🔴 NULL 을 허용한다. 칸이 생기기 전에 만들어진 줄을 손대지 않는 편이
+    // 안전하고(값을 채우는 마이그레이션이 없다), 읽는 쪽은 `?? []` 로 받는다.
+    // 그래서 「아직 한 번도 안 적음(NULL)」과 「적었다 지움([])」이 값으로는
+    // 갈리지만, 뜻은 둘 다 「태그 없음」으로만 쓴다.
+    faultTags: jsonb("fault_tags").$type<string[]>(),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
